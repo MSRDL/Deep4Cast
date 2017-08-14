@@ -1,12 +1,31 @@
-import math, matplotlib
+import math, matplotlib, bisect, bokeh
 from pandas import read_csv, DataFrame, Series
 from matplotlib import pyplot as plt
-from bokeh import plotting
 
-plotting.output_notebook(force=True)
+# Given the window size, pre-compute the linear regression coefficients
+def _ComputeCoefs(w):
+    a11 = w * (w - 1) * (2 * w - 1) / 6
+    a12 = w * (w - 1) / 2
+    a22 = w
+    invariant = 1 / (a11 * a22 - a12 * a12)
+    return (a11, a12, a22, invariant)
 
+#Given a window, compute the anomaly score as well as the trend
+def _ComputeScore(coefs, values):
+    b1 = b2 = 0
+    for j, y in enumerate(values):
+        b1 += j * y
+        b2 += y
+    slope = (coefs[2] * b1 - coefs[1] * b2) * coefs[3]
+    intercept = (b1 - coefs[0] * slope) / coefs[1]
 
-def DetectAnomalies(data, windowSize, depth=1, numTopResults=None, col=0):
+    residual = 0
+    for j, y in enumerate(values):
+        deviation = slope * j + intercept - y
+        residual += deviation * deviation
+    return math.sqrt(residual / len(values)), slope
+
+def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
     dtype = type(data)
     if not (dtype is DataFrame or dtype is Series):
         print('Data must be of type Series or DataFrame')
@@ -14,89 +33,96 @@ def DetectAnomalies(data, windowSize, depth=1, numTopResults=None, col=0):
 
     if data.shape[1] != 1:
         print(
-            "This anomaly detector only works with one-dimensional time series. If your data has multile signals, it's " \
+            "This anomaly detector only works with one-dimensional time series. If your data has multiple signals, it's " \
             + "recommended that you split your data into multiple files, and apply a detector for each signal.")
         return
 
     matplotlib.rcParams['figure.figsize'] = [16, 3]
     data.plot()
 
-    w = windowSize # number of data points
-    a11 = w * (w - 1) * (2 * w - 1) / 6
-    a12 = w * (w - 1) / 2
-    a22 = w
-    invariant = 1 / (a11 * a22 - a12 * a12)
+    w = windowSize
+    coefs = _ComputeCoefs(w)
 
     values = data.icol(col)
     numWindows = len(values) - w + 1
     windows = [None] * numWindows
     for pos in range(numWindows):
-        b1 = b2 = 0
-        for j, y in enumerate(values[pos:pos + w]):
-            b1 += j * y
-            b2 += y
-        slope = (a22 * b1 - a12 * b2) * invariant
-        intercept = (b1 - a11 * slope) / a12
+        windows[pos] = (pos, _ComputeScore(coefs, values[pos:pos + w])[0])
 
-        # Compute the residual
-        residual = 0
-        for j, y in enumerate(values[pos:pos + w]):
-            deviation = slope * j + intercept - y
-            residual += deviation * deviation
-
-        windows[pos] = (pos, math.sqrt(residual / w))
-
-    # Sort windows by score in descending order
+    #Sort windows by score in descending order
     windows.sort(key=lambda item: item[1], reverse=True)
 
     autoThreshold = numTopResults is None
     if autoThreshold:
         numTopResults = numWindows
 
-    # Filtering overlapping windows
-    cur = 0
-    tops = []
-    while len(tops) < numTopResults:
-        while cur < numWindows and any(abs(windows[pos][0] - windows[cur][0]) < w for pos in tops):
-            cur += 1
-        if cur < numWindows:
-            tops.append(cur)
-            cur += 1
+    #Filtering overlapping windows
+    topIds = [0]  #positions of the top windows, after filtering
+    diffs = [1e-6]  #differences between adjacent ranked windows
+    curId = 0
+    curTop = windows[0][1];
+    while len(topIds) < numTopResults:
+        while curId < numWindows and any(abs(windows[pos][0] - windows[curId][0]) < w for pos in topIds):
+            curId += 1
+        if curId < numWindows:
+            topIds.append(curId)
+            cur = windows[curId][1]
+            diffs.append(curTop - cur)
+            curTop = cur
+            curId += 1
         else:
             break
-    results = [windows[pos] for pos in tops]
+    results = [windows[pos] for pos in topIds]
 
-    cut = 0
-    for d in range(depth):
-        diffMax = 0
-        for pos in range(cut + 1, len(tops)):
-            diff = results[pos - 1][1] - results[pos][1]
-            if diff > diffMax:
-                cut = pos
-                diffMax = diff
+    #Automatically compute the thresholds
+    topJumps = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:levels]
+    topJumps.sort() #after figuring out the top jumps, reorder them by the anomaly index
+    thresholds = [(results[jump-1][1] + results[jump][1]) / 2 for jump in topJumps]
 
+    #Visualize the outputs
     timestamps = data.index
     print('{0: <45}Anomaly Score'.format('Time Interval'))
-    low = results[min(cut, len(results) - 1)][1]
+    low = results[min(topJumps[-1], len(results) - 1)][1]
     hi = results[0][1]
     norm = matplotlib.colors.Normalize(2 * low - hi, hi)
-    for pos in range(cut):
-        idx = results[pos][0]
-        start = str(timestamps[idx])
-        end = str(timestamps[idx + w - 1])
-        score = results[pos][1]
-        print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
-        plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
+    curId = 0
+    for level, jump in enumerate(topJumps):
+        for pos in range(curId, jump):
+            idx = results[pos][0]
+            start = str(timestamps[idx])
+            end = str(timestamps[idx + w - 1])
+            score = results[pos][1]
+            print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
+            plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
+            curId += 1
+        print('--------------- Threshold level {0}: {1:G} ---------------'.format(
+            levels - level, thresholds[level]));
+        
+    return thresholds
 
-    if autoThreshold:
-        almostAnom = results[cut]
-        almostAnomScore = almostAnom[1]
-        print('\n---------------- Auto Threshold: {0:G} ----------------\n'.format(
-            (results[cut - 1][1] + almostAnomScore) / 2))
-        idx = almostAnom[0]
-        print('{0: <45}{1:G}'.format(str(timestamps[idx]) + ' - ' + str(timestamps[idx + w]), almostAnomScore))
-
-
-def DetectAnomaliesFromFile(filename, windowSize, separator=',', depth=1, numTopResults=None):
+def DetectAnomaliesFromFile(filename, windowSize, separator=',', levels=1, numTopResults=None):
     data = read_csv(filename, parse_dates=0, index_col=0)
-    return DetectAnomalies(data, windowSize, depth=depth, numTopResults=numTopResults)
+    return DetectAnomalies(data, windowSize, levels=levels, numTopResults=numTopResults)
+
+class StreamingAnomalyDetector:
+    def __init__(self, windowSize, thresholds):
+        # This is prototype code and doesn't validate arguments
+        self._w = windowSize;
+        self._thresholds = thresholds;
+        self._buffer = [float('nan')] * windowSize;
+        self._coefs = _ComputeCoefs(windowSize)
+
+    # Update thresholds on demand without restarting the service
+    def UpdateThesholds(self, thresholds):
+        self._thresholds = thresholds;
+
+    def Score(self, value):
+        #REVIEW: in Python, how to shift an array in place without allocating another array?
+        w1 = self._w - 1;
+        self._buffer[0:w1] = self._buffer[-w1:]
+        self._buffer[-1] = value;
+        return _ComputeScore(self._coefs, self._buffer)
+
+    def Classify(self, value):
+        (score, trend) = self.Score(self, value)
+        return bisect.bisect_left(self._thresholds, score)
