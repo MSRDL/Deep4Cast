@@ -31,19 +31,13 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
         print('Data must be of type Series or DataFrame')
         return
 
-    if data.shape[1] != 1:
-        print(
-            "This anomaly detector only works with one-dimensional time series. If your data has multiple signals, it's " \
-            + "recommended that you split your data into multiple files, and apply a detector for each signal.")
-        return
-
     matplotlib.rcParams['figure.figsize'] = [16, 3]
     data.plot()
 
     w = windowSize
     coefs = _ComputeCoefs(w)
 
-    values = data.icol(col)
+    values = data.iloc[:,col]
     numWindows = len(values) - w + 1
     windows = [None] * numWindows
     for pos in range(numWindows):
@@ -101,7 +95,7 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
     return thresholds
 
 def DetectAnomaliesFromFile(filename, windowSize, separator=',', levels=1, numTopResults=None):
-    data = read_csv(filename, parse_dates=0, index_col=0)
+    data = read_csv(filename, parse_dates=True, index_col=0)
     return DetectAnomalies(data, windowSize, levels=levels, numTopResults=numTopResults)
 
 class StreamingAnomalyDetector:
