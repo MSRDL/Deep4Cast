@@ -27,17 +27,20 @@ def _ComputeScore(coefs, values):
 
 def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
     dtype = type(data)
+    
+    if (dtype is DataFrame):
+        data = data.iloc[:,col]
+
     if not (dtype is DataFrame or dtype is Series):
         print('Data must be of type Series or DataFrame')
         return
 
-    matplotlib.rcParams['figure.figsize'] = [16, 3]
     data.plot()
 
     w = windowSize
     coefs = _ComputeCoefs(w)
 
-    values = data.iloc[:,col]
+    values = data.fillna(0).values  #fill NANs with 0 to make the series contiguous
     numWindows = len(values) - w + 1
     windows = [None] * numWindows
     for pos in range(numWindows):
@@ -67,6 +70,13 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
         else:
             break
     results = [windows[pos] for pos in topIds]
+
+    if levels == 0:
+        max_anom_score = results[0][1]
+        print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anom_score)
+                + 'Since you specified no anomaly in the historical data, '
+                + 'the recommended threshold is {0:2f}'.format(max_anom_score * 2))
+        return [max_anom_score * 2]
 
     #Automatically compute the thresholds
     topJumps = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:levels]
