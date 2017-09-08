@@ -1,6 +1,8 @@
-import math, matplotlib, bisect, bokeh
-from pandas import read_csv, DataFrame, Series
-from matplotlib import pyplot as plt
+import math, matplotlib, bisect
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import collections
 
 # Given the window size, pre-compute the linear regression coefficients
 def _ComputeCoefs(w):
@@ -25,15 +27,18 @@ def _ComputeScore(coefs, values):
         residual += deviation * deviation
     return math.sqrt(residual / len(values)), slope
 
-def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
-    dtype = type(data)
-    
-    if (dtype is DataFrame):
-        data = data.iloc[:,col]
+class Anomaly:
 
-    if not (dtype is DataFrame or dtype is Series):
-        print('Data must be of type Series or DataFrame')
-        return
+    def __init__(self, level, start, end, score):
+        self.level = level
+        self.start = start
+        self.end = end
+        self.score = score
+
+def DetectAnomalies(data, windowSize, levels=1, numTopResults=None):
+
+    if type(data) != pd.Series:
+        raise ValueError('data must be of the pandas Series type')
 
     data.plot()
 
@@ -90,22 +95,33 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, col=0):
     hi = results[0][1]
     norm = matplotlib.colors.Normalize(2 * low - hi, hi)
     curId = 0
+    levs = []
+    starts = []
+    ends = []
+    scores = []
     for level, jump in enumerate(topJumps):
         for pos in range(curId, jump):
             idx = results[pos][0]
             start = str(timestamps[idx])
             end = str(timestamps[idx + w - 1])
             score = results[pos][1]
+            levs.append(level)
+            starts.append(start)
+            ends.append(end)
+            scores.append(score)
             print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
             plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
             curId += 1
         print('--------------- Threshold level {0}: {1:G} ---------------'.format(
-            levels - level, thresholds[level]));
-        
-    return thresholds
+            levels - level, thresholds[level]))
+
+        anomalies = pd.DataFrame(np.column_stack([levs, starts, ends, scores]))
+        anomalies.columns = ['level', 'start', 'end', 'score']
+
+    return anomalies, thresholds
 
 def DetectAnomaliesFromFile(filename, windowSize, separator=',', levels=1, numTopResults=None):
-    data = read_csv(filename, parse_dates=True, index_col=0)
+    data = pd.read_csv(filename, parse_dates=True, index_col=0, squeeze=True)
     return DetectAnomalies(data, windowSize, levels=levels, numTopResults=numTopResults)
 
 class StreamingAnomalyDetector:
