@@ -2,7 +2,6 @@ import math, matplotlib, bisect
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import collections
 
 # Given the window size, pre-compute the linear regression coefficients
 def _ComputeCoefs(w):
