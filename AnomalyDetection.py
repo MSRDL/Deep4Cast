@@ -27,20 +27,13 @@ def _ComputeScore(coefs, values):
         residual += deviation * deviation
     return math.sqrt(residual / len(values)), slope
 
-class Anomaly:
-
-    def __init__(self, level, start, end, score):
-        self.level = level
-        self.start = start
-        self.end = end
-        self.score = score
-
-def DetectAnomalies(data, windowSize, levels=1, numTopResults=None):
+def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, noisy=False):
 
     if type(data) != pd.Series:
         raise ValueError('data must be of the pandas Series type')
 
-    data.plot()
+    if noisy:
+        data.plot()
 
     w = windowSize
     coefs = _ComputeCoefs(w)
@@ -78,7 +71,8 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None):
 
     if levels == 0:
         max_anom_score = results[0][1]
-        print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anom_score)
+        if noisy:
+            print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anom_score)
                 + 'Since you specified no anomaly in the historical data, '
                 + 'the recommended threshold is {0:2f}'.format(max_anom_score * 2))
         return [max_anom_score * 2]
@@ -90,7 +84,8 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None):
 
     #Visualize the outputs
     timestamps = data.index
-    print('{0: <45}Anomaly Score'.format('Time Interval'))
+    if noisy:
+        print('{0: <45}Anomaly Score'.format('Time Interval'))
     low = results[min(topJumps[-1], len(results) - 1)][1]
     hi = results[0][1]
     norm = matplotlib.colors.Normalize(2 * low - hi, hi)
@@ -105,20 +100,34 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None):
             start = str(timestamps[idx])
             end = str(timestamps[idx + w - 1])
             score = results[pos][1]
-            levs.append(level)
+            levs.append(levels-level)
             starts.append(start)
             ends.append(end)
             scores.append(score)
-            print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
-            plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
+            if noisy:
+                print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
+                plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
             curId += 1
-        print('--------------- Threshold level {0}: {1:G} ---------------'.format(
-            levels - level, thresholds[level]))
+        if noisy:
+            print('--------------- Threshold level {0}: {1:G} ---------------'.format(
+                levels - level, thresholds[level]))
 
         anomalies = pd.DataFrame(np.column_stack([levs, starts, ends, scores]))
         anomalies.columns = ['level', 'start', 'end', 'score']
 
     return anomalies, thresholds
+
+def AnomaliesToSeries(anomalies, index):
+    rows = anomalies.shape[0]
+    series = pd.Series(np.zeros(len(index)), dtype=np.int32)
+    series.index = index
+    for r in range(rows):
+        start = anomalies.loc[r, 'start']
+        end = anomalies.loc[r, 'end']
+        level = int(anomalies.loc[r, 'level'])
+        series[start:end] = level
+    return series
+    
 
 def DetectAnomaliesFromFile(filename, windowSize, separator=',', levels=1, numTopResults=None):
     data = pd.read_csv(filename, parse_dates=True, index_col=0, squeeze=True)
