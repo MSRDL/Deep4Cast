@@ -26,12 +26,13 @@ def _ComputeScore(coefs, values):
         residual += deviation * deviation
     return math.sqrt(residual / len(values)), slope
 
-def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, noisy=False):
+def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, visualize=False):
 
     if type(data) != pd.Series:
         raise ValueError('data must be of the pandas Series type')
 
-    if noisy:
+    # TODO, is it possible not to spread the visualize clause around?
+    if visualize:
         data.plot()
 
     w = windowSize
@@ -70,7 +71,7 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, noisy=False)
 
     if levels == 0:
         max_anom_score = results[0][1]
-        if noisy:
+        if visualize:
             print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anom_score)
                 + 'Since you specified no anomaly in the historical data, '
                 + 'the recommended threshold is {0:2f}'.format(max_anom_score * 2))
@@ -83,7 +84,7 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, noisy=False)
 
     #Visualize the outputs
     timestamps = data.index
-    if noisy:
+    if visualize:
         print('{0: <45}Anomaly Score'.format('Time Interval'))
     low = results[min(topJumps[-1], len(results) - 1)][1]
     hi = results[0][1]
@@ -103,11 +104,11 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, noisy=False)
             starts.append(start)
             ends.append(end)
             scores.append(score)
-            if noisy:
+            if visualize:
                 print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
                 plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
             curId += 1
-        if noisy:
+        if visualize:
             print('--------------- Threshold level {0}: {1:G} ---------------'.format(
                 levels - level, thresholds[level]))
 
@@ -126,11 +127,6 @@ def AnomaliesToSeries(anomalies, index):
         level = int(anomalies.loc[r, 'level'])
         series[start:end] = level
     return series
-    
-
-def DetectAnomaliesFromFile(filename, windowSize, separator=',', levels=1, numTopResults=None):
-    data = pd.read_csv(filename, parse_dates=True, index_col=0, squeeze=True)
-    return DetectAnomalies(data, windowSize, levels=levels, numTopResults=numTopResults)
 
 class StreamingAnomalyDetector:
     def __init__(self, windowSize, thresholds):
