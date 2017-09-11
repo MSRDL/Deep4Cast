@@ -112,8 +112,8 @@ def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, visualize=Fa
             print('--------------- Threshold level {0}: {1:G} ---------------'.format(
                 levels - level, thresholds[level]))
 
-        anomalies = pd.DataFrame(np.column_stack([levs, starts, ends, scores]))
-        anomalies.columns = ['level', 'start', 'end', 'score']
+    anomalies = pd.DataFrame(np.column_stack([levs, starts, ends, scores]))
+    anomalies.columns = ['level', 'start', 'end', 'score']
 
     return anomalies, thresholds
 
