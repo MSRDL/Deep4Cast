@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # Given the window size, pre-compute the linear regression coefficients
 def _ComputeCoefs(w):
     a11 = w * (w - 1) * (2 * w - 1) / 6
@@ -10,6 +11,7 @@ def _ComputeCoefs(w):
     a22 = w
     invariant = 1 / (a11 * a22 - a12 * a12)
     return (a11, a12, a22, invariant)
+
 
 #Given a window, compute the anomaly score as well as the trend
 def _ComputeScore(coefs, values):
@@ -26,97 +28,83 @@ def _ComputeScore(coefs, values):
         residual += deviation * deviation
     return math.sqrt(residual / len(values)), slope
 
-def DetectAnomalies(data, windowSize, levels=1, numTopResults=None, visualize=False):
 
+def DetectAnomalies(data, window_size, num_levels=10, num_anomalies=None, visualize=True):
     if type(data) != pd.Series:
         raise ValueError('data must be of the pandas Series type')
+    data = data.fillna(0) #fill NANs with 0 to make the series contiguous
 
-    # TODO, is it possible not to spread the visualize clause around?
-    if visualize:
-        data.plot()
-
-    w = windowSize
+    w = window_size
     coefs = _ComputeCoefs(w)
 
-    values = data.fillna(0).values  #fill NANs with 0 to make the series contiguous
-    numWindows = len(values) - w + 1
-    windows = [None] * numWindows
-    for pos in range(numWindows):
-        windows[pos] = (pos, _ComputeScore(coefs, values[pos:pos + w])[0])
+    values = data.values
+    num_windows = len(values) - w + 1
+    windows = [(iw, _ComputeScore(coefs, values[iw:iw + w])[0])
+               for iw in range(num_windows)]
+    
+    [None] * (len(values) - w + 1)
+    for iw, _ in enumerate(windows):
+        windows[iw] = (iw, _ComputeScore(coefs, values[iw:iw + w])[0])
 
     #Sort windows by score in descending order
     windows.sort(key=lambda item: item[1], reverse=True)
 
-    autoThreshold = numTopResults is None
-    if autoThreshold:
-        numTopResults = numWindows
+    if num_anomalies==0 or num_levels==0:
+        max_anomaly_score = windows[0][1]
+        if visualize:
+            print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anomaly_score)
+                + 'Since you specified no anomaly observed in the historical data, '
+                + 'the recommended threshold is {0:2f}'.format(max_anomaly_score * 2))
+        return [max_anomaly_score * 2]
 
-    #Filtering overlapping windows
-    topIds = [0]  #positions of the top windows, after filtering
-    diffs = [1e-6]  #differences between adjacent ranked windows
-    curId = 0
-    curTop = windows[0][1];
-    while len(topIds) < numTopResults:
-        while curId < numWindows and any(abs(windows[pos][0] - windows[curId][0]) < w for pos in topIds):
-            curId += 1
-        if curId < numWindows:
-            topIds.append(curId)
-            cur = windows[curId][1]
-            diffs.append(curTop - cur)
-            curTop = cur
-            curId += 1
+    #Filter out overlapping windows
+    num_results = num_anomalies if num_anomalies else num_windows
+    iw = 0
+    top_score = windows[iw][1]
+    top_iws = [iw]  # positions of the top windows, after filtering
+    diffs = [1e-6]  # differences between adjacent ranked windows
+    while len(top_iws) < num_results:
+        while iw < num_windows and any(abs(windows[jw][0] - windows[iw][0]) < w for jw in top_iws):
+            iw += 1
+        if iw < num_windows:
+            top_iws.append(iw)
+            score = windows[iw][1]
+            diffs.append(top_score - score)
+            top_score = score
+            iw += 1
         else:
             break
-    results = [windows[pos] for pos in topIds]
-
-    if levels == 0:
-        max_anom_score = results[0][1]
-        if visualize:
-            print('The maximum anomaly score in the training data is {0:2f}.'.format(max_anom_score)
-                + 'Since you specified no anomaly in the historical data, '
-                + 'the recommended threshold is {0:2f}'.format(max_anom_score * 2))
-        return [max_anom_score * 2]
+    results = [windows[iw] for iw in top_iws]
 
     #Automatically compute the thresholds
-    topJumps = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:levels]
-    topJumps.sort() #after figuring out the top jumps, reorder them by the anomaly index
-    thresholds = [(results[jump-1][1] + results[jump][1]) / 2 for jump in topJumps]
+    #REVIEW ktran: need better names and explanation
+    top_jumps = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:num_levels]
+    top_jumps.sort() #after figuring out the top jumps, reorder them by the anomaly index
+    thresholds = [(results[jump-1][1] + results[jump][1]) / 2 for jump in top_jumps]
 
-    #Visualize the outputs
     timestamps = data.index
+    anomalies = []
+    rank = 0
+    for level, rank_end in enumerate(top_jumps):
+        while rank < rank_end:
+            iw = results[rank][0]
+            anomalies.append((num_levels - level, str(timestamps[iw]), str(timestamps[iw + w - 1]), results[rank][1]))
+            rank += 1
+    anomalies = pd.DataFrame(anomalies, columns = ['level', 'start', 'end', 'score'])
+
     if visualize:
-        print('{0: <45}Anomaly Score'.format('Time Interval'))
-    low = results[min(topJumps[-1], len(results) - 1)][1]
-    hi = results[0][1]
-    norm = matplotlib.colors.Normalize(2 * low - hi, hi)
-    curId = 0
-    levs = []
-    starts = []
-    ends = []
-    scores = []
-    for level, jump in enumerate(topJumps):
-        for pos in range(curId, jump):
-            idx = results[pos][0]
-            start = str(timestamps[idx])
-            end = str(timestamps[idx + w - 1])
-            score = results[pos][1]
-            levs.append(levels-level)
-            starts.append(start)
-            ends.append(end)
-            scores.append(score)
-            if visualize:
-                print('{0: <45}{1:G}'.format(start + ' - ' + end, score))
-                plt.axvspan(start, end, color=plt.cm.jet(norm(score)), alpha=0.5);
-            curId += 1
-        if visualize:
-            print('--------------- Threshold level {0}: {1:G} ---------------'.format(
-                levels - level, thresholds[level]))
+        from IPython.display import display
+        display(anomalies)
 
-    anomalies = pd.DataFrame(np.column_stack([levs, starts, ends, scores]))
-    anomalies.columns = ['level', 'start', 'end', 'score']
-
+        data.plot(title='window size: {0}, #severity levels: {1}, #known incidents: {2}'
+                  .format(window_size, num_levels, num_anomalies))
+        for anomaly in anomalies.values:
+            plt.axvspan(anomaly[1], anomaly[2], color=plt.cm.jet(0.5 + float(anomaly[0])/num_levels/2), alpha=0.5)
+        
     return anomalies, thresholds
 
+
+#@Lech: please explain this function
 def AnomaliesToSeries(anomalies, index):
     rows = anomalies.shape[0]
     series = pd.Series(np.zeros(len(index)), dtype=np.int32)
@@ -127,6 +115,7 @@ def AnomaliesToSeries(anomalies, index):
         level = int(anomalies.loc[r, 'level'])
         series[start:end] = level
     return series
+
 
 class StreamingAnomalyDetector:
     def __init__(self, windowSize, thresholds):
