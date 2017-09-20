@@ -39,7 +39,7 @@ def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visua
 
     values = data.values.reshape(len(data), 1)
     num_windows = len(values) - w + 1
-    windows = np.hstack(values[ix:ix + window_size] for ix in range(num_windows))
+    windows = np.vstack(values[ix:ix + num_windows] for ix in range(window_size))
     residuals = np.linalg.norm(coefs @ windows, axis=0)
 
     windows = [(ix, residuals[ix]) for ix in range(num_windows)]
