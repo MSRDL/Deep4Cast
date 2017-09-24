@@ -25,28 +25,33 @@ def _partition_anomalies(windows, k):
     """
     diffs = [windows[iw - 1][1] - windows[iw][1]
              for iw in range(1, len(windows))]
-    top_jump_positions = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:k]
-    return sorted(top_jump_positions)
+    top_jump_positions = sorted(range(len(diffs)), key=lambda i: diffs[i], reverse=True)[0:k-1]
+    return sorted(top_jump_positions) + [len(windows) - 1]
 
 
-def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visualize=True):
+def detect_anomalies(data, lag, num_anomalies, num_levels=5, visualize=True):
     if type(data) != pd.Series:
         raise ValueError('data must be of the pandas Series type')
+    if lag < 3:
+        raise ValueError('lag needs to be at least 3.')
+    if num_anomalies < 0:
+        raise ValueError('expected number of anomalies must be positive.')
+    num_levels = min(num_levels, num_anomalies) 
+
     data = data.fillna(method='pad')  # fill NANs with 0 to make the series contiguous
 
-    w = window_size
-    coefs = _compute_coef_matrix(w)
+    coefs = _compute_coef_matrix(lag)
 
-    values = data.values.reshape(len(data), 1)
-    num_windows = len(values) - w + 1
-    windows = np.hstack(values[ix:ix + window_size] for ix in range(num_windows))
+    values = data.values
+    num_windows = len(values) - lag + 1
+    windows = np.vstack(values[ix:ix + num_windows] for ix in range(lag))
     residuals = np.linalg.norm(coefs @ windows, axis=0)
 
     windows = [(ix, residuals[ix]) for ix in range(num_windows)]
     windows.sort(key=lambda item: item[1],
                  reverse=True)  # sort the windows by their residuals in descending order
 
-    if num_anomalies == 0 or sensitivity == 0:
+    if num_anomalies == 0 or num_levels == 0:
         max_anomaly_score = windows[0][1]
         if visualize:
             print(
@@ -56,11 +61,10 @@ def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visua
         return [max_anomaly_score * 2]
 
     # Filter out overlapping windows
-    num_results = num_anomalies if num_anomalies else num_windows
     iw = 0
     top_iws = [iw]  # positions of the top windows, after filtering
-    while len(top_iws) < num_results:
-        while iw < num_windows and any(abs(windows[jw][0] - windows[iw][0]) < w for jw in top_iws):
+    while len(top_iws) < num_anomalies:
+        while iw < num_windows and any(abs(windows[jw][0] - windows[iw][0]) < lag for jw in top_iws):
             iw += 1
         if iw < num_windows:
             top_iws.append(iw)
@@ -69,8 +73,8 @@ def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visua
             break
     results = [windows[iw] for iw in top_iws]
 
-    partition_points = _partition_anomalies(results, sensitivity)
-    thresholds = [(results[jump][1] + results[jump + 1][1]) / 2 for jump in partition_points]
+    partition_points = _partition_anomalies(results, num_levels)
+    thresholds = [results[iw][1] - 1e-3 for iw in partition_points]
 
     timestamps = data.index
     anomalies = []
@@ -78,7 +82,7 @@ def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visua
     for level, limit in enumerate(partition_points):
         while rank <= limit:
             iw = results[rank][0]
-            anomalies.append((sensitivity - level, str(timestamps[iw]), str(timestamps[iw + w - 1]), results[rank][1]))
+            anomalies.append((num_levels - level, str(timestamps[iw]), str(timestamps[iw + lag - 1]), results[rank][1]))
             rank += 1
     anomalies = pd.DataFrame(anomalies, columns=['level', 'start', 'end', 'score'])
 
@@ -86,10 +90,10 @@ def detect_anomalies(data, window_size, sensitivity=5, num_anomalies=None, visua
         from IPython.display import display
         display(anomalies)
 
-        data.plot(title='window size: {0}, sensitivity: {1}, #known incidents: {2}'
-                  .format(window_size, sensitivity, num_anomalies))
+        data.plot(title='lag: {0}, #levels: {1}, #anomalies: {2}'
+                  .format(lag, num_levels, num_anomalies))
         for anomaly in anomalies.values:
-            plt.axvspan(anomaly[1], anomaly[2], color=plt.cm.jet(0.65 + float(anomaly[0]) / sensitivity / 3), alpha=0.5)
+            plt.axvspan(anomaly[1], anomaly[2], color=plt.cm.jet(0.65 + float(anomaly[0]) / num_levels / 3), alpha=0.5)
 
     return anomalies, thresholds
 
@@ -108,13 +112,13 @@ def anomalies_to_series(anomalies, index):
 
 
 class StreamingAnomalyDetector:
-    def __init__(self, window_size, thresholds):
+    def __init__(self, lag, thresholds):
         # This is prototype code and doesn't validate arguments
-        self._w = window_size
+        self._w = lag
         self._thresholds = thresholds
-        self._buffer = np.array([float('nan')] * window_size)
-        self._buffer.shape = (window_size, 1)  # make it vertical
-        self._coef_matrix = _compute_coef_matrix(window_size)
+        self._buffer = np.array([float('nan')] * lag)
+        self._buffer.shape = (lag, 1)  # make it vertical
+        self._coef_matrix = _compute_coef_matrix(lag)
 
     # Update thresholds on demand without restarting the service
     def update_thresholds(self, thresholds):
