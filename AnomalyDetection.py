@@ -58,7 +58,7 @@ def detect_anomalies(data, lag, num_anomalies, num_levels=5, visualize=True):
                 'The maximum anomaly score in the training data is {0:2f}. '
                 'Since you specified no anomaly observed in the historical data, the recommended threshold is {1:2f}'
                     .format(max_anomaly_score, max_anomaly_score * 2))
-        return [max_anomaly_score * 2]
+        return None, [max_anomaly_score * 2]
 
     # Filter out overlapping windows
     iw = 0
