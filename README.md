@@ -1,14 +1,43 @@
-# Time  Series Analysis Suite
+# Deep Forecast - by Microsoft Research
 
-## Forecasting
-We plan to develop an easy to use multivariate TS forecasting software framework, based on LSTM and with confidence estimate.
+```Deep Forecast``` provides easy access to deep learning-based tools for forecasting, anomaly detection, and counterfactual analysis.
 
+### Forecasting
+Forecasting tutorial coming soon.
 
-## Anomaly Detection
+### Anomaly Detection
+Anomaly detection turorial coming soon.
 
-- **[Demo](http://nbviewer.jupyter.org/github/MSRDL/TSA/blob/master/demo.ipynb)**
-- **[Presentation: Streaming Least Squares Algorithm for Anomaly Detection](https://1drv.ms/p/s!Ar57GyE1TzYYh_UGeQ8ATUAytx52Fw)**
+### Counterfactual Analysis
+Counterfactual tutorial coming soon.
 
+## Documentation
+Coming soon
 
+## Installation
+### Anaconda
+Not yet integrated
+
+### Pip
+Not yet integrated
+
+### Source
+```
+$ python setup.py install
+```
+
+### Package Requirements
+Coming soon
+
+## Contributor Instructions
+Coming soon
+
+## Authors
+- [Toby Bischoff](tobischo@microsoft.com)
+- [Austin Gross](augross@microsoft.com)
+- [Shirley Ren](shirleyr@microsoft.com)
+- [Kenneth Tran](ktran@microsoft.com)
+- [Will Wang](will.wang@microsoft.com)
+- [Qinqin Zhang](qinzh@microsoft.com)
 ____
 Copyright (c) by Kenneth Tran and other contributors. All rights reserved.  Released under BSD license as described in the `LICENSE` file.
