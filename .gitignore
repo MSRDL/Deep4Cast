@@ -6,6 +6,7 @@ __*/
 *.ppt
 *.docx
 *.doc
+.DS_Store
 
 # Data files
 /data
@@ -83,7 +84,8 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+Makefile
+make.bat
 
 # PyBuilder
 target/
