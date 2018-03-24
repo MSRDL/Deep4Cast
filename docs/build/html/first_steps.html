@@ -1,0 +1,545 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>ToDo &#8212; Deep Forecast 0.1b documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Contribution" href="contribution.html" />
+    <link rel="prev" title="Tutorials" href="tutorials.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  <div class="document">
+    
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Deep Forecast</a></h1>
+
+
+
+<p class="blurb">Forecasting package for large problems.</p>
+
+
+
+
+<p>
+<iframe src="https://ghbtns.com/github-btn.html?user=MSRDL&repo=TS&type=watch&count=true&size=large&v=2"
+  allowtransparency="true" frameborder="0" scrolling="0" width="200px" height="35px"></iframe>
+</p>
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contribution.html">Contribution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="tutorials.html">Tutorials</a><ul>
+      <li>Previous: <a href="tutorials.html" title="previous chapter">Tutorials</a></li>
+      <li>Next: <a href="contribution.html" title="next chapter">Contribution</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  
+<style>
+/* CSS for nbsphinx extension */
+
+/* remove conflicting styling from Sphinx themes */
+div.nbinput,
+div.nbinput div.prompt,
+div.nbinput div.input_area,
+div.nbinput div[class*=highlight],
+div.nbinput div[class*=highlight] pre,
+div.nboutput,
+div.nbinput div.prompt,
+div.nbinput div.output_area,
+div.nboutput div[class*=highlight],
+div.nboutput div[class*=highlight] pre {
+    background: none;
+    border: none;
+    padding: 0 0;
+    margin: 0;
+    box-shadow: none;
+}
+
+/* avoid gaps between output lines */
+div.nboutput div[class*=highlight] pre {
+    line-height: normal;
+}
+
+/* input/output containers */
+div.nbinput,
+div.nboutput {
+    display: -webkit-flex;
+    display: flex;
+    align-items: flex-start;
+    margin: 0;
+    width: 100%;
+}
+@media (max-width: 540px) {
+    div.nbinput,
+    div.nboutput {
+        flex-direction: column;
+    }
+}
+
+/* input container */
+div.nbinput {
+    padding-top: 5px;
+}
+
+/* last container */
+div.nblast {
+    padding-bottom: 5px;
+}
+
+/* input prompt */
+div.nbinput div.prompt pre {
+    color: #303F9F;
+}
+
+/* output prompt */
+div.nboutput div.prompt pre {
+    color: #D84315;
+}
+
+/* all prompts */
+div.nbinput div.prompt,
+div.nboutput div.prompt {
+    min-width: 8ex;
+    padding-top: 0.4em;
+    padding-right: 0.4em;
+    text-align: right;
+    flex: 0;
+}
+@media (max-width: 540px) {
+    div.nbinput div.prompt,
+    div.nboutput div.prompt {
+        text-align: left;
+        padding: 0.4em;
+    }
+    div.nboutput div.prompt.empty {
+        padding: 0;
+    }
+}
+
+/* disable scrollbars on prompts */
+div.nbinput div.prompt pre,
+div.nboutput div.prompt pre {
+    overflow: hidden;
+}
+
+/* input/output area */
+div.nbinput div.input_area,
+div.nboutput div.output_area {
+    padding: 0.4em;
+    -webkit-flex: 1;
+    flex: 1;
+    overflow: auto;
+}
+@media (max-width: 540px) {
+    div.nbinput div.input_area,
+    div.nboutput div.output_area {
+        width: 100%;
+    }
+}
+
+/* input area */
+div.nbinput div.input_area {
+    border: 1px solid #cfcfcf;
+    border-radius: 2px;
+    background: #f7f7f7;
+}
+
+/* override MathJax center alignment in output cells */
+div.nboutput div[class*=MathJax] {
+    text-align: left !important;
+}
+
+/* override sphinx.ext.pngmath center alignment in output cells */
+div.nboutput div.math p {
+    text-align: left;
+}
+
+/* standard error */
+div.nboutput div.output_area.stderr {
+    background: #fdd;
+}
+
+/* ANSI colors */
+.ansi-black-fg { color: #3E424D; }
+.ansi-black-bg { background-color: #3E424D; }
+.ansi-black-intense-fg { color: #282C36; }
+.ansi-black-intense-bg { background-color: #282C36; }
+.ansi-red-fg { color: #E75C58; }
+.ansi-red-bg { background-color: #E75C58; }
+.ansi-red-intense-fg { color: #B22B31; }
+.ansi-red-intense-bg { background-color: #B22B31; }
+.ansi-green-fg { color: #00A250; }
+.ansi-green-bg { background-color: #00A250; }
+.ansi-green-intense-fg { color: #007427; }
+.ansi-green-intense-bg { background-color: #007427; }
+.ansi-yellow-fg { color: #DDB62B; }
+.ansi-yellow-bg { background-color: #DDB62B; }
+.ansi-yellow-intense-fg { color: #B27D12; }
+.ansi-yellow-intense-bg { background-color: #B27D12; }
+.ansi-blue-fg { color: #208FFB; }
+.ansi-blue-bg { background-color: #208FFB; }
+.ansi-blue-intense-fg { color: #0065CA; }
+.ansi-blue-intense-bg { background-color: #0065CA; }
+.ansi-magenta-fg { color: #D160C4; }
+.ansi-magenta-bg { background-color: #D160C4; }
+.ansi-magenta-intense-fg { color: #A03196; }
+.ansi-magenta-intense-bg { background-color: #A03196; }
+.ansi-cyan-fg { color: #60C6C8; }
+.ansi-cyan-bg { background-color: #60C6C8; }
+.ansi-cyan-intense-fg { color: #258F8F; }
+.ansi-cyan-intense-bg { background-color: #258F8F; }
+.ansi-white-fg { color: #C5C1B4; }
+.ansi-white-bg { background-color: #C5C1B4; }
+.ansi-white-intense-fg { color: #A1A6B2; }
+.ansi-white-intense-bg { background-color: #A1A6B2; }
+
+.ansi-default-inverse-fg { color: #FFFFFF; }
+.ansi-default-inverse-bg { background-color: #000000; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-underline { text-decoration: underline; }
+</style>
+<div class="section" id="ToDo">
+<h1>ToDo<a class="headerlink" href="#ToDo" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li>Uncertainty quantification</li>
+<li>Time series of different history</li>
+</ul>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [224]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span>%matplotlib inline
+import numpy as np
+np.random.seed(42)
+
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+from pandas import read_table
+from keras.models import Model, Sequential
+from keras.layers import Input, Dense, Conv1D, MaxPooling1D, AveragePooling1D, Dropout, Flatten, GRU, LSTM
+from keras.optimizers import *
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [225]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span>filename = &#39;timeseries_data.csv&#39;
+df = read_table(filename, sep=&#39;,&#39;)
+length = len(df)
+dim = len(df.columns)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [226]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span>test_length = 9  # test on the last 9 months
+train_length = length - test_length
+ts = df.values
+ts_train = ts[:train_length]
+</pre></div>
+</div>
+</div>
+<hr class="docutils" />
+<p>We could use stateful RNN. However, in practice, this is not preferred
+because: - A long window is sufficient to capture any long-term
+dependency in the time series - It’s impossible to debug after live
+deployment because the series would grow indefinitely</p>
+<p>So we will try two window-based approaches: temporal convolution and
+truncated RNN.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [227]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span># Normalize data
+means = ts[:train_length, :].mean(0)
+stds = ts[:train_length, :].std(0)
+ts_normed = (ts - means) / stds
+assert ts_normed.shape == ts.shape and np.sum(np.isnan(ts_normed)) == 0
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [228]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span>sequence_length = 20
+
+# Generate X and y for train/test
+# Xs are 3D tensors of shape number of sequences * sequence length * dim
+# ys are 2D tensors of shape number of sequences * dim
+X_train, y_train, X_test, y_test = [], [], [], []
+
+for i in range(train_length - sequence_length):
+    X_train.append(ts_normed[i:i+sequence_length])
+    y_train.append(ts_normed[i+sequence_length])
+
+for i in range(-test_length, 0):
+    y_test.append(ts_normed[i])
+    X_test.append(ts_normed[i-sequence_length:i])
+
+X_train, y_train = np.array(X_train), np.array(y_train)
+X_test, y_test = np.array(X_test), np.array(y_test)
+
+def compute_mape(model, x, y):
+    forecasts = model.predict(x, batch_size=len(x))
+    forecasts = (forecasts * stds) + means
+    y_denom = (y * stds) + means
+    return np.mean(np.abs((y_denom - forecasts) / y_denom))
+
+def test(model):
+    print(&#39;Train Mean Absolute Percentage Error (MAPE): {0:.3f}&#39;.format(compute_mape(model, X_train, y_train)))
+    print(&#39;Test Mean Absolute Percentage Error (MAPE): {0:.3f}&#39;.format(compute_mape(model, X_test, y_test)))
+</pre></div>
+</div>
+</div>
+<div class="section" id="Temporal-Convolution">
+<h2>Temporal Convolution<a class="headerlink" href="#Temporal-Convolution" title="Permalink to this headline">¶</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [240]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span>from keras.layers.advanced_activations import ELU
+# Hyper parameters
+n_layers = 1
+activation = ELU()
+batch_size = 8
+epochs = 50
+
+print(&#39;Creating Model&#39;)
+sequence_input = Input(shape=(sequence_length, dim))
+x = Conv1D(64, 5, activation=activation, init=&#39;glorot_normal&#39;)(sequence_input)
+# dim: 16 x 64
+x = MaxPooling1D(3, stride=1)(x)
+# x = AveragePooling1D(pool_length=2, stride=1)(x)
+# dim: 14 x 64
+x = Conv1D(64, 3, activation=activation, init=&#39;glorot_normal&#39;)(x)
+# dim: 12 x 64
+x = MaxPooling1D(4, stride=2)(x)  # global max pooling
+# x = AveragePooling1D(pool_length=4, stride=1)(x)
+# dim: 5 x 64
+x = Conv1D(128, 3, activation=activation, init=&#39;glorot_normal&#39;)(x)
+# dim: 3 x 128
+x = MaxPooling1D(3, stride=1)(x)  # global max pooling
+# x = AveragePooling1D(pool_length=4, stride=1)(x)
+# dim: 1 x 128
+x = Flatten()(x)
+x = Dense(128, activation=activation, init=&#39;glorot_normal&#39;)(x)
+# x = Dropout(0.5)(x)
+preds = Dense(dim)(x)
+model = Model(sequence_input, preds)
+
+# sgd = Nadam(lr=999, schedule_decay=0.1)
+# sgd = Nadam(lr=0.1, schedule_decay=0.01)
+# sgd = RMSprop(lr=0.1)
+# sgd = SGD(lr=0.01, momentum=0.9, decay=0.1, nesterov=False)
+# model.compile(loss=&#39;mape&#39;, optimizer=sgd, metrics=[&#39;mape&#39;])
+sgd = SGD(lr=0.1, momentum=0.9, decay=0.1, nesterov=False)
+model.compile(loss=&#39;mse&#39;, optimizer=sgd, metrics=[&#39;mape&#39;])
+
+print(&#39;Training&#39;)
+history = model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=epochs,
+                    verbose=0, validation_split=0.0)
+
+plt.figure(figsize=(15,6))
+plt.subplot(211)
+plt.plot(history.epoch, history.history[&#39;loss&#39;], &#39;r&#39;)
+# plt.plot(history.epoch, history.history[&#39;val_loss&#39;], &#39;b&#39;)
+plt.ylim(0, 2)
+plt.subplot(212)
+plt.plot(history.epoch, history.history[&#39;mean_absolute_percentage_error&#39;], &#39;r&#39;)
+#plt.plot(history.epoch, history.history[&#39;val_mean_absolute_percentage_error&#39;], &#39;b&#39;)
+plt.ylim(0, 200)
+
+print(&#39;Min. training loss: {0:.3f}&#39;.format(min(history.history[&#39;loss&#39;])))
+# print(&#39;Min. validation loss: {1:.3f}&#39;.format(min(history.history[&#39;val_loss&#39;])))
+print(&#39;Testing&#39;)
+test(model)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Creating Model
+Training
+Min. training loss: 0.055
+Testing
+Train Mean Absolute Percentage Error (MAPE): 0.121
+Test Mean Absolute Percentage Error (MAPE): 0.145
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/first_steps_8_1.png" src="_images/first_steps_8_1.png" />
+</div>
+</div>
+</div>
+<div class="section" id="RNN">
+<h2>RNN<a class="headerlink" href="#RNN" title="Permalink to this headline">¶</a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre>
+<span></span>In [242]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre>
+<span></span># Hyper parameters
+num_rnn_layers = 1
+num_rnn_units = 128
+batch_size = 8
+epochs = 50
+
+print(&#39;Creating Model&#39;)
+model = Sequential()
+for i in range(num_rnn_layers):
+    model.add(GRU(num_rnn_units,
+                  input_length=sequence_length, input_dim=dim,
+                  return_sequences=True if i &lt; num_rnn_layers-1 else False))
+model.add(Dense(dim, init=&#39;glorot_normal&#39;))
+#sgd = SGD(lr=999999, decay=1e-4, nesterov=True)
+#sgd = Nadam(lr=999, schedule_decay=0.1)
+# sgd = Nadam(lr=0.01, schedule_decay=0.1)
+# model.compile(loss=&#39;mape&#39;, optimizer=sgd, metrics=[&#39;mape&#39;, &#39;mse&#39;])
+# sgd = Nadam(lr=0.1, schedule_decay=1e-2)
+# sgd = SGD(lr=0.01, momentum=0.5, decay=1e-3)
+sgd = RMSprop(lr=0.01)
+model.compile(loss=&#39;mse&#39;, optimizer=sgd, metrics=[&#39;mape&#39;])
+
+print(&#39;Training&#39;)
+history = model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=epochs,
+                    verbose=0, validation_split=0.0)
+
+plt.figure(figsize=(15,6))
+plt.subplot(211)
+plt.plot(history.epoch, history.history[&#39;loss&#39;], &#39;r&#39;)
+# plt.plot(history.epoch, history.history[&#39;val_loss&#39;], &#39;b&#39;)
+plt.ylim(0, 2)
+plt.subplot(212)
+plt.plot(history.epoch, history.history[&#39;mean_absolute_percentage_error&#39;], &#39;r&#39;)
+# plt.plot(history.epoch, history.history[&#39;val_mean_absolute_percentage_error&#39;], &#39;b&#39;)
+plt.ylim(0, 200)
+
+print(&#39;Min. training loss: {0:.3f}&#39;.format(min(history.history[&#39;loss&#39;])))
+# print(&#39;Min. validation loss: {1:.3f}&#39;.format(min(history.history[&#39;val_loss&#39;])))
+
+print(&#39;Testing&#39;)
+test(model)
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Creating Model
+Training
+Min. training loss: 0.048
+Testing
+Train Mean Absolute Percentage Error (MAPE): 0.200
+Test Mean Absolute Percentage Error (MAPE): 0.191
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="_images/first_steps_10_1.png" src="_images/first_steps_10_1.png" />
+</div>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+    <div class="clearer"></div>
+  </div>
+    <div class="footer">
+      &copy;2018, Microsoft Research.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
