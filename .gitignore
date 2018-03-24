@@ -84,8 +84,6 @@ instance/
 .scrapy
 
 # Sphinx documentation
-Makefile
-make.bat
 
 # PyBuilder
 target/
