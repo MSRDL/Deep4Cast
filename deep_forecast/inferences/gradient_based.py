@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from keras.optimizers import RMSprop
-from multivariate_rnns import MultivariateRNN
-
+#from keras.optimizers import RMSprop
 # import numpy as np
 
+class RMS
 # batch_size = 8
 # epochs = 50
 
