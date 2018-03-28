@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Time series regression module.
 
-This module provides access to regressors that can be fit to univariate
+This module provides access to forecasters that can be fit to univariate
 or multivariate time series.
 
 """
@@ -9,11 +9,11 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 from hyperopt import hp, fmin, tpe
-from keras.optimizers import RMSprop
-from deep4cast.models import TruncatedRNN
+from keras.optimizers import RMSprop, SGD
+from deep4cast.models import TemporalCNN, TruncatedRNN
 
 
-class Regressor(ABC):
+class Forecaster(ABC):
     """Abstract data handler class."""
 
     def __init__(self):
@@ -70,7 +70,7 @@ class Regressor(ABC):
 
     @abstractmethod
     def hyperfit(self, X, y, validation_split=0):
-        """Optimize regressor hyperparameters and model parameters.
+        """Optimize forecaster hyperparameters and model parameters.
 
         :param X: Independent variable array.
         :type X: numpy.array with shape (n,m,p)
@@ -132,10 +132,56 @@ class Regressor(ABC):
             raise Exception('Model has not been fitted!')
 
 
-class TruncatedRNNRegressor(Regressor):
-    """Concrete implementation of Regressor using TruncatedRNN.
+class TemporalCNNForecaster(Forecaster):
+    """Concrete implementation of forecaster using TruncatedRNN.
 
-    Uses the TruncatedRNN model to build a regressor for time series
+    Uses the TemporalCNN model to build a forecaster for time series
+    forecasting..
+
+    :param topology: Neural network topology.
+    :type topology: list of integer tuples of length 4
+    :param batch_size: Number of data points in each batch.
+    :type batch_size: int
+    :param epochs: Number of training epochs.
+    :type epochs: int
+    :param lr: Learning rate for optimizer.
+    :type lr: float
+
+    """
+
+    def __init__(self, topology=None, batch_size=10, epochs=1, lr=0.01):
+        """Initialize additional properties."""
+        # Hyperparemeters for this forecaster class
+        self._topology = topology if topology else [(64, 5, 1)]
+        self._batch_size = batch_size
+        self._epochs = epochs
+        self._learning_rate = lr
+
+        # Class-specific  attributes for this forecaster class
+        self._model_class = TemporalCNN
+        self._loss = 'mse'
+        self._optimizer = SGD(lr=0.1, momentum=0.9, decay=0.1, nesterov=False)
+        self._metrics = ['mape']
+        self._hyperoptimizer = None
+
+    def hyperfit(self, X, y, validation_split=0):
+        """Optimize forecaster hyperparameters.
+
+        :param X: Independent variable array.
+        :type X: numpy.array with shape (n,m.p)
+        :param y: Dependent variable array.
+        :type y: numpy.array with shape (q,r)
+        :param validation_split: Fraction of data for validation.
+        :type validation_split: float
+
+        """
+        pass
+
+
+class TruncatedRNNForecaster(Forecaster):
+    """Concrete implementation of forecaster using TruncatedRNN.
+
+    Uses the TruncatedRNN model to build a forecaster for time series
     forecasting..
 
     :param topology: Neural network topology.
@@ -151,13 +197,13 @@ class TruncatedRNNRegressor(Regressor):
 
     def __init__(self, topology=None, batch_size=10, epochs=1, lr=0.01):
         """Initialize additional properties."""
-        # Hyperparemeters for this regressor class
+        # Hyperparemeters for this forecaster class
         self._topology = topology if topology else [16]
         self._batch_size = batch_size
         self._epochs = epochs
         self._learning_rate = lr
 
-        # Class-specific  attributes for this regressor class
+        # Class-specific  attributes for this forecaster class
         self._model_class = TruncatedRNN
         self._loss = 'mse'
         self._optimizer = RMSprop(lr=lr)
@@ -165,7 +211,7 @@ class TruncatedRNNRegressor(Regressor):
         self._hyperoptimizer = None
 
     def hyperfit(self, X, y, validation_split=0):
-        """Optimize regressor hyperparameters.
+        """Optimize forecaster hyperparameters.
 
         :param X: Independent variable array.
         :type X: numpy.array with shape (n,m.p)

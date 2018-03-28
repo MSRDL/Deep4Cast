@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'Deep Forecast'
+project = 'Deep4cast'
 copyright = '2018, Microsoft Research'
 author = 'Microsoft Research'
 
@@ -118,7 +118,7 @@ html_show_sourcelink = False
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'DeepForecastdoc'
+htmlhelp_basename = 'Deep4castdoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -145,7 +145,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'DeepForecast.tex', 'Deep Forecast Documentation',
+    (master_doc, 'Deep4cast.tex', 'Deep4cast Documentation',
      'Microsoft', 'manual'),
 ]
 
@@ -155,7 +155,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'deepforecast', 'Deep Forecast Documentation',
+    (master_doc, 'deepforecast', 'Deep4cast Documentation',
      [author], 1)
 ]
 
@@ -166,8 +166,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'DeepForecast', 'Deep Forecast Documentation',
-     author, 'DeepForecast', 'One line description of project.',
+    (master_doc, 'Deep4cast', 'Deep4cast Documentation',
+     author, 'Deep4cast', 'One line description of project.',
      'Miscellaneous'),
 ]
 

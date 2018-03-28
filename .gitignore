@@ -10,12 +10,10 @@ __*/
 
 # Data files
 /data
-*.csv
+#*.csv
 *.tsv
 *.xlsx
 *.xls
-*.csv
-*.tsv
 *.ss
 *.rds
 *.db

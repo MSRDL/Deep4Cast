@@ -37,7 +37,7 @@ class TruncatedRNN(Sequential):
         # Check if topology conforms to exepcted model topology kind
         self.check_topology(topology)
 
-        # Initia-lize super class with custom layers
+        # Initialize super class with custom layers
         super(TruncatedRNN, self).__init__(self._build_layers())
 
     def _build_layers(self):
@@ -74,8 +74,10 @@ class TruncatedRNN(Sequential):
         :raises: Exception in case of misspecified topology.
 
         """
+        # Check if topology is not empty
         if not topology:
             raise Exception('Topology list is empty.')
 
+        # Check if topology is list of positive integers
         if any(not isinstance(n, int) or n < 1 for n in topology):
             raise Exception('Topology should be list of positive integers.')

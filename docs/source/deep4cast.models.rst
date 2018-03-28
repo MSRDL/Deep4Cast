@@ -12,10 +12,10 @@ deep4cast.models.multivariate\_rnns module
     :undoc-members:
     :show-inheritance:
 
-deep4cast.models.univariate\_cnns module
-----------------------------------------
+deep4cast.models.temporal\_cnns module
+--------------------------------------
 
-.. automodule:: deep4cast.models.univariate_cnns
+.. automodule:: deep4cast.models.temporal_cnns
     :members:
     :undoc-members:
     :show-inheritance:
