@@ -1,7 +1,7 @@
-deep_forecast
-=============
+deep4cast
+=========
 
 .. toctree::
    :maxdepth: 4
 
-   deep_forecast
+   deep4cast

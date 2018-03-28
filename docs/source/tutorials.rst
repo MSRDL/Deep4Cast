@@ -1,9 +1,9 @@
 Tutorials
 =========
 
-Cool tutorial description.
+Tutorial description coming soon.
 
 .. toctree::
    :maxdepth: 1
 
-   first_steps.ipynb
+   quickstart.ipynb

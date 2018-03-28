@@ -1,18 +1,20 @@
-# Deep Forecast - by Microsoft Research
+# Deep Forecast 
+
+***This package is under development.***
 
 ```Deep Forecast``` provides easy access to deep learning-based tools for forecasting, anomaly detection, and counterfactual analysis.
 
 ### Forecasting
-Forecasting tutorial coming soon.
+Quickstart tutorial can be found in ```/tutorials/quickstart.ipynb```.
 
 ### Anomaly Detection
 Anomaly detection turorial coming soon.
 
 ### Counterfactual Analysis
-Counterfactual tutorial coming soon.
+Counterfactual analysis tutorial coming soon.
 
 ## Documentation
-Coming soon
+Documentation can be found in ```/docs/build/html/index.html```.
 
 ## Installation
 ### Anaconda
@@ -22,12 +24,28 @@ Not yet integrated
 Not yet integrated
 
 ### Source
+Ideally, you create a new virtual environment, for example when using Anaconda, with
 ```
+$ conda create -n your_env python=3.6
+$ source activate your_env
+```
+From the package directory you then need to install the requirements and the package
+```
+$ pip install -r requirements.txt
 $ python setup.py install
 ```
+or with pip's editable model (useful for development) as
+```
+$ pip install -r requirements.txt
+$ pip install -e .
+```
 
-### Package Requirements
-Coming soon
+### Main Requirements
+```
+Python 3.6
+Tensorflow, CTNK, or Theano
+Keras
+```
 
 ## Contributor Instructions
 Coming soon

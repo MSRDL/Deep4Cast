@@ -1,13 +1,13 @@
-deep\_forecast.criticisms package
-=================================
+deep4cast.inferences package
+============================
 
 Submodules
 ----------
 
-deep\_forecast.criticisms.criticisms module
+deep4cast.inferences.gradient\_based module
 -------------------------------------------
 
-.. automodule:: deep_forecast.criticisms.criticisms
+.. automodule:: deep4cast.inferences.gradient_based
     :members:
     :undoc-members:
     :show-inheritance:
@@ -16,7 +16,7 @@ deep\_forecast.criticisms.criticisms module
 Module contents
 ---------------
 
-.. automodule:: deep_forecast.criticisms
+.. automodule:: deep4cast.inferences
     :members:
     :undoc-members:
     :show-inheritance:
