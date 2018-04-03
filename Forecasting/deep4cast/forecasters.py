@@ -28,7 +28,7 @@ class Forecaster(object):
         # Hyperparameters
         self._topology = topology or []
         self._batch_size = None
-        self._epochs = 1
+        self._epochs = 50
         self._learning_rate = 0.01
         self._momentum = None
         self._decay = None
@@ -40,7 +40,7 @@ class Forecaster(object):
                 'momentum',
                 'decay'
             ):
-                setattr(self, key, value)
+                setattr(self, '_' + key, value)
 
         # Optimizer-related attributes
         self._optimizer = optimizer or SGD(lr=self._learning_rate)
@@ -196,20 +196,20 @@ class CNNForecaster(Forecaster):
         """Initialize properties."""
         # Hyperparameters
         if topology:
-            super(CNNForecaster, self).__init__(topology)
+            super(CNNForecaster, self).__init__(topology, **kwargs)
         else:
-            super(CNNForecaster, self).__init__([
-                ('Conv1D', {'filters': 64,
-                            'kernel_size': 5,
-                            'activation': 'elu'}),
-                ('MaxPooling1D', {'pool_size': 3,
-                                  'strides': 1}),
-                ('Flatten', {}),
-                ('Dense', {'units': 64})
-            ]
+            super(CNNForecaster, self).__init__(
+                [
+                    ('Conv1D', {'filters': 64,
+                                'kernel_size': 5,
+                                'activation': 'elu'}),
+                    ('MaxPooling1D', {'pool_size': 3,
+                                      'strides': 1}),
+                    ('Flatten', {}),
+                    ('Dense', {'units': 64})
+                ],
+                **kwargs
             )
-        self._batch_size = 10
-        self._epochs = 10
         self._learning_rate = 0.1
         self._momentum = 0.9
         self._decay = 0.1
@@ -237,11 +237,12 @@ class RNNForecaster(Forecaster):
         """Initialize properties."""
         # Hyperparameters
         if topology:
-            super(RNNForecaster, self).__init__(topology)
+            super(RNNForecaster, self).__init__(topology, **kwargs)
         else:
-            super(RNNForecaster, self).__init__([('GRU', {'units': 32})])
-        self._batch_size = 10
-        self._epochs = 50
+            super(RNNForecaster, self).__init__(
+                [('GRU', {'units': 32})],
+                **kwargs
+            )
         self._learning_rate = 0.01
 
         # Optimizer-related attributes
