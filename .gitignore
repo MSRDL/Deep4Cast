@@ -10,7 +10,7 @@ __*/
 .pytest_cache
 
 # Data files
-/data
+#/data
 #*.csv
 *.tsv
 *.xlsx
