@@ -1,20 +1,21 @@
 deep4cast package
 =================
 
-Subpackages
------------
-
-.. toctree::
-
-    deep4cast.models
-
 Submodules
 ----------
 
-deep4cast.forecasting module
+deep4cast.forecasters module
 ----------------------------
 
-.. automodule:: deep4cast.forecasting
+.. automodule:: deep4cast.forecasters
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+deep4cast.models module
+-----------------------
+
+.. automodule:: deep4cast.models
     :members:
     :undoc-members:
     :show-inheritance:

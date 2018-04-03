@@ -1,0 +1,15 @@
+[
+  "tests/test_forecasters.py::test_RNN_defaults",
+  "tests/test_forecasters.py::test_RNN_custom_topology",
+  "tests/test_forecasters.py::test_RNN_fitting",
+  "tests/test_forecasters.py::test_CNN_defaults",
+  "tests/test_forecasters.py::test_CNN_custom_topology",
+  "tests/test_forecasters.py::test_CNN_fitting",
+  "tests/test_forecasters.py::test_CNN_GRU_fitting",
+  "tests/test_models.py::test_init_GRU",
+  "tests/test_models.py::test_init_LSTM",
+  "tests/test_models.py::test_init_Conv1D_deep",
+  "tests/test_models.py::test_init_LSTM_Conv1D",
+  "tests/test_models.py::test_init_Conv1D_GRU",
+  "tests/test_models.py::test_init_Empty"
+]

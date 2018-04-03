@@ -1,0 +1,6 @@
+{
+  "tests/test_forecasters.py::TestRNNForecaster::()::test_custom_topology": true,
+  "tests/test_forecasters.py::TestRNNForecaster::()::test_defaults": true,
+  "tests/test_forecasters.py::TestRNNForecaster::()::test_fitting": true,
+  "tests/test_models.py::test_init_Conv2D_GRU": true
+}
