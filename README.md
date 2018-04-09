@@ -1,14 +1,40 @@
-# Time  Series Analysis Suite
+# Deep4cast 
 
-## Forecasting
-We plan to develop an easy to use multivariate TS forecasting software framework, based on LSTM and with confidence estimate.
+***This package is under development.***
 
+```Deep4cast``` provides easy access to deep learning-based tools for forecasting, anomaly detection, and counterfactual analysis.
 
-## Anomaly Detection
+### Forecasting
+Quickstart tutorial can be found in ```/tutorials/quickstart.ipynb```.
 
-- **[Demo](http://nbviewer.jupyter.org/github/MSRDL/TSA/blob/master/demo.ipynb)**
-- **[Presentation: Streaming Least Squares Algorithm for Anomaly Detection](https://1drv.ms/p/s!Ar57GyE1TzYYh_UGeQ8ATUAytx52Fw)**
+### Anomaly Detection
+Tutorial coming soon.
 
+## Documentation
+Documentation can be found in ```/docs/build/html/index.html```.
 
-____
-Copyright (c) by Kenneth Tran and other contributors. All rights reserved.  Released under BSD license as described in the `LICENSE` file.
+## Installation
+### Source
+From the package directory you then need to install the requirements and the package
+```
+$ pip install -r requirements.txt
+$ python setup.py install
+```
+or with pip's editable model (useful for development) as
+```
+$ pip install -r requirements.txt
+$ pip install -e .
+```
+
+### Main Requirements
+```
+Python 3.6
+Tensorflow, CTNK, or Theano
+Keras
+```
+
+## Contributor Instructions
+Coming soon
+
+## Authors
+TBD
