@@ -5,27 +5,17 @@ from fixtures import synthetic_data
 from deep4cast import CNNForecaster, RNNForecaster
 
 
-def test_RNN_defaults():
-    model = RNNForecaster()
-
-    assert model._epochs == 50
-    assert len(model._topology) == 1
-    assert model._learning_rate == 0.01
-    assert model.history is None
-    assert model._data_std is None
-    assert model._is_fitted is False
-
-
 def test_RNN_custom_topology(synthetic_data):
     topology = [('GRU', {'units': 32}),
                 ('GRU', {'units': 32, 'activation': 'relu'})]
     model = RNNForecaster(topology)
 
-    assert model._epochs == 50
-    assert len(model._topology) == 2
-    assert model._learning_rate == 0.01
+    assert model.batch_size == 10
+    assert model.epochs == 10
+    assert len(model.topology) == 2
+    assert model.learning_rate == 0.01
     assert model.history is None
-    assert model._data_std is None
+    assert model.data_stds is None
     assert model._is_fitted is False
 
 
@@ -33,24 +23,14 @@ def test_RNN_fitting(synthetic_data):
     X = synthetic_data
     topology = [('GRU', {'units': 32}),
                 ('GRU', {'units': 32, 'activation': 'relu'})]
-    model = RNNForecaster(topology)
+    model = RNNForecaster(topology, batch_size=8, epochs=50)
     model.fit(X, lookback_period=4)
 
-    assert model._epochs == 50
-    assert len(model._topology) == 2
-    assert model._learning_rate == 0.01
+    assert model.batch_size == 8
+    assert model.epochs == 50
+    assert len(model.topology) == 2
+    assert model.learning_rate == 0.01
     assert model._is_fitted is True
-
-
-def test_CNN_defaults():
-    model = CNNForecaster()
-
-    assert model._epochs == 50
-    assert len(model._topology) == 7
-    assert model._learning_rate == 0.1
-    assert model.history is None
-    assert model._data_std is None
-    assert model._is_fitted is False
 
 
 def test_CNN_custom_topology(synthetic_data):
@@ -62,13 +42,14 @@ def test_CNN_custom_topology(synthetic_data):
         ('Flatten', {}),
         ('Dense', {'units': 128})
     ]
-    model = CNNForecaster(topology)
+    model = CNNForecaster(topology, batch_size=8, epochs=50, learning_rate=0.1)
 
-    assert model._epochs == 50
-    assert len(model._topology) == len(topology)
-    assert model._learning_rate == 0.1
+    assert model.batch_size == 8
+    assert model.epochs == 50
+    assert len(model.topology) == len(topology)
+    assert model.learning_rate == 0.1
     assert model.history is None
-    assert model._data_std is None
+    assert model.data_stds is None
     assert model._is_fitted is False
 
 
@@ -87,9 +68,10 @@ def test_CNN_fitting(synthetic_data):
     model = CNNForecaster(topology)
     model.fit(X, lookback_period=20)
 
-    assert model._epochs == 50
-    assert len(model._topology) == len(topology)
-    assert model._learning_rate == 0.1
+    assert model.batch_size == 10
+    assert model.epochs == 10
+    assert len(model.topology) == len(topology)
+    assert model.learning_rate == 0.1
     assert model._is_fitted is True
 
 
@@ -102,7 +84,8 @@ def test_CNN_GRU_fitting(synthetic_data):
     model = CNNForecaster(topology)
     model.fit(X, lookback_period=20)
 
-    assert model._epochs == 50
-    assert len(model._topology) == len(topology)
-    assert model._learning_rate == 0.1
+    assert model.batch_size == 10
+    assert model.epochs == 10
+    assert len(model.topology) == len(topology)
+    assert model.learning_rate == 0.1
     assert model._is_fitted is True
