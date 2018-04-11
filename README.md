@@ -11,7 +11,7 @@ Quickstart tutorial can be found in ```/tutorials/quickstart.ipynb```.
 Tutorial coming soon.
 
 ## Documentation
-Documentation can be found in ```/docs/build/html/index.html```.
+Coming soon
 
 ## Installation
 ### Source
@@ -27,6 +27,7 @@ $ pip install -e .
 ```
 
 ### Main Requirements
+Please install the following versions for you environment.
 ```
 Python 3.6
 Tensorflow, CTNK, or Theano
