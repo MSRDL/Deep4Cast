@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Utilities module for convinience functions."""
+"""Utilities module for convenience functions."""
 
 import numpy as np
 
