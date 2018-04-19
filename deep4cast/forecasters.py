@@ -163,6 +163,31 @@ class Forecaster():
         if not self._is_standardized:
             raise ValueError('The data has not been standardized.')
 
+    def predict_samples(self, ts, confidenceInterval=False, n_sample=1000):
+        """Generate predictions for input time series array ts.
+           Produce prediction samples if confidenceInterval is set to True
+            :param ts: Time series array of shape (n_steps, n_variables)
+            :type ts: numpy.array
+        """
+        self._check_is_fitted()
+        self._check_is_standardized()
+        self._check_data_format(ts)
+
+        # Bring input into correct format for model train and prediction
+        ts_standardized = self._standardize(ts, locked=True)
+        ts_standardized = ts_standardized.astype('float32')
+        X = self._sequentialize(ts_standardized)[0]
+
+        prediction_samples = []
+        for _ in range(n_sample):
+            prediction = self._model.predict(X, self.batch_size)
+            prediction_samples.append(self._unstandardize(prediction))
+        prediction_samples = np.array(prediction_samples)
+        if confidenceInterval:
+            return prediction_samples
+        else:
+            return np.mean(prediction_samples, axis=2)
+
 
 class CNNForecaster(Forecaster):
     """Implementation of Forecaster as temporal CNN.
@@ -251,6 +276,7 @@ class RNNForecaster(Forecaster):
             self.batch_size,
             self.epochs
         )
+
 
 if __name__ == '__main__':
     pass

@@ -7,8 +7,9 @@ multi-variate time series alike.
 
 """
 import keras.layers
-
 from inspect import getargspec
+from keras import backend as K
+from keras.layers.core import Lambda
 from keras.models import Sequential
 
 
@@ -27,11 +28,12 @@ class LayeredTimeSeriesModel(Sequential):
 
     """
 
-    def __init__(self, input_shape, topology):
+    def __init__(self, input_shape, topology, dropout_rate=0.5):
         """Initialize attributes."""
         self._input_shape = input_shape
         self._topology = topology
         self._rnd_init = 'glorot_normal'
+        self._dropout_rate = dropout_rate
 
         # Initialize super class with custom layers
         super(LayeredTimeSeriesModel, self).__init__(self._build_layers())
@@ -76,6 +78,7 @@ class LayeredTimeSeriesModel(Sequential):
         params['units'] = self._input_shape[1]
         if not self._topology:
             params['input_shape'] = self._input_shape
+        layers.append(Lambda(lambda x: K.dropout(x, level=0.5)))
         layers.append(keras.layers.Dense(**params))
 
         return layers
