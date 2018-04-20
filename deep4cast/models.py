@@ -78,7 +78,7 @@ class LayeredTimeSeriesModel(Sequential):
         params['units'] = self._input_shape[1]
         if not self._topology:
             params['input_shape'] = self._input_shape
-        layers.append(Lambda(lambda x: K.dropout(x, level=0.5)))
+        layers.append(Lambda(lambda x: K.dropout(x, level=self._dropout_rate)))
         layers.append(keras.layers.Dense(**params))
 
         return layers

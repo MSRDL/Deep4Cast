@@ -163,7 +163,7 @@ class Forecaster():
         if not self._is_standardized:
             raise ValueError('The data has not been standardized.')
 
-    def predict_samples(self, ts, confidenceInterval=False, n_sample=1000):
+    def predict_samples(self, ts, n_sample=1000, quantiles=(0.025,0.975)):
         """Generate predictions for input time series array ts.
            Produce prediction samples if confidenceInterval is set to True
             :param ts: Time series array of shape (n_steps, n_variables)
@@ -183,10 +183,13 @@ class Forecaster():
             prediction = self._model.predict(X, self.batch_size)
             prediction_samples.append(self._unstandardize(prediction))
         prediction_samples = np.array(prediction_samples)
-        if confidenceInterval:
-            return prediction_samples
-        else:
-            return np.mean(prediction_samples, axis=2)
+        lower_quantile = np.nanpercentile(prediction_samples, quantiles[0]*100, axis=0)
+        upper_quantile = np.nanpercentile(prediction_samples, quantiles[1]*100, axis=0)
+        median_prediction = np.nanpercentile(prediction_samples, 50.0, axis=0)
+        mean_prediction = np.mean(prediction_samples, axis=0)
+        return {'mean_prediction': mean_prediction, 'median_prediction': median_prediction,
+                'lower_quantile': lower_quantile, 'upper_quantile': upper_quantile,
+                'prediction_samples': prediction_samples}
 
 
 class CNNForecaster(Forecaster):
