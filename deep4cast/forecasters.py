@@ -94,7 +94,7 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly.
         self._is_fitted = True
 
-    def predict(self, ts):
+    def predict_point_estimate(self, ts):
         """Generate predictions for input time series array ts.
 
         :param ts: Time series array of shape (n_steps, n_variables)
@@ -168,7 +168,7 @@ class Forecaster():
            Output mean, median, quantile predictions and prediction samples
             :param ts: Time series array of shape (n_steps, n_variables)
             :type ts: numpy.array
-            :param n_sample: Number of prediction samples
+            :param n_sample: Number of prediction samples, at least 1
             :type n_sample: int
             :param quantiles: Tuple of quantiles to produce corresponding confidence interval
             :type quantiles: Tuple of two floats from 0.0 to 1.0, e.g. (0.025, 0.975)

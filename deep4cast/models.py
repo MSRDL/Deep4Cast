@@ -28,7 +28,7 @@ class LayeredTimeSeriesModel(Sequential):
 
     """
 
-    def __init__(self, input_shape, topology, dropout_rate=0.5):
+    def __init__(self, input_shape, topology=None, dropout_rate=0.5):
         """Initialize attributes."""
         self._input_shape = input_shape
         self._topology = topology
@@ -41,36 +41,37 @@ class LayeredTimeSeriesModel(Sequential):
     def _build_layers(self):
         """Build model layers one layer at a time from topology."""
         layers = []
-        n_layers = len(self._topology)
-        for i, (name, params) in enumerate(self._topology):
-            # Construct Keras layer to be built from string 'name' which is
-            # part of topology list.
-            layer_cls = getattr(keras.layers, name)
+        if self._topology:
+            n_layers = len(self._topology)
+            for i, (name, params) in enumerate(self._topology):
+                # Construct Keras layer to be built from string 'name' which is
+                # part of topology list.
+                layer_cls = getattr(keras.layers, name)
 
-            # In order to get the accepteble arguments for each layer we need
-            # to use inspect because of keras's legacy support decorators.
-            try:
-                args = getargspec(layer_cls.__init__._original_function)[0]
-            except AttributeError:
-                args = getargspec(layer_cls)[0]
+                # In order to get the accepteble arguments for each layer we need
+                # to use inspect because of keras's legacy support decorators.
+                try:
+                    args = getargspec(layer_cls.__init__._original_function)[0]
+                except AttributeError:
+                    args = getargspec(layer_cls)[0]
 
-            # Add activation and other input arguments to params dict when
-            # necessary. For example, MaxPooling1D does not
-            # accept the argument 'kernel_initializer'.
-            if 'kernel_initializer' in args:
-                params['kernel_initializer'] = self._rnd_init
+                # Add activation and other input arguments to params dict when
+                # necessary. For example, MaxPooling1D does not
+                # accept the argument 'kernel_initializer'.
+                if 'kernel_initializer' in args:
+                    params['kernel_initializer'] = self._rnd_init
 
-            # The 'return_squences' argument is necessary for stacking RNNs.
-            if 'return_sequences' in args and i < n_layers - 1:
-                params['return_sequences'] = True
+                # The 'return_squences' argument is necessary for stacking RNNs.
+                if 'return_sequences' in args and i < n_layers - 1:
+                    params['return_sequences'] = True
 
-            # Create Keras layer, but make sure that the input shape is
-            # passed to the first later.
-            if i == 0:
-                layer = layer_cls(**params, input_shape=self._input_shape)
-            else:
-                layer = layer_cls(**params)
-            layers.append(layer)
+                # Create Keras layer, but make sure that the input shape is
+                # passed to the first later.
+                if i == 0:
+                    layer = layer_cls(**params, input_shape=self._input_shape)
+                else:
+                    layer = layer_cls(**params)
+                layers.append(layer)
 
         # Add at least a dense layer for output with output shape of the
         # time series dimensionality.
@@ -78,7 +79,8 @@ class LayeredTimeSeriesModel(Sequential):
         params['units'] = self._input_shape[1]
         if not self._topology:
             params['input_shape'] = self._input_shape
-        layers.append(Lambda(lambda x: K.dropout(x, level=self._dropout_rate)))
+        else:
+            layers.append(Lambda(lambda x: K.dropout(x, level=self._dropout_rate)))
         layers.append(keras.layers.Dense(**params))
 
         return layers
