@@ -8,7 +8,7 @@ or multivariate time series given as arrays.
 import numpy as np
 
 from keras.optimizers import RMSprop, SGD
-from .models import LayeredTimeSeriesModel
+from .models import LayeredTimeSeriesModel, SharedLayerModel
 
 
 class Forecaster():
@@ -76,13 +76,14 @@ class Forecaster():
         # Set up the model based on internal model class.
         self._model = self.model_class(
             input_shape=X.shape[1:],
-            topology=self.topology,
+            topology=self.topology
         )
         self._model.compile(
             loss=self._loss,
             optimizer=self.optimizer,
             metrics=self._metrics
         )
+        print(self._model.summary())
         self.history = self._model.fit(
             X,
             y,
@@ -251,6 +252,47 @@ class RNNForecaster(Forecaster):
             self.batch_size,
             self.epochs
         )
+
+
+class FlexibleForecaster(Forecaster):
+    """Implementation of Forecaster as truncated RNN.
+
+    :param topology: Neural network topology.
+    :type topology: dict
+    :param **kwargs: Hyperparameters(e.g., learning_rate, momentum, etc.).
+    :type **kwargs: dict
+
+    """
+
+    def __init__(self, topology, **kwargs):
+        """Initialize properties."""
+        self.model_class = SharedLayerModel
+        self.batch_size = 10
+        self.epochs = 10
+        self.learning_rate = 0.01
+        allowed_args = (
+            'batch_size',
+            'epochs',
+            'learning_rate',
+        )
+        for arg, value in kwargs.items():
+            if arg in allowed_args:
+                setattr(self, arg, value)
+            else:
+                raise ValueError('Invalid keyword argument: {}.'.format(arg))
+
+        self.optimizer = RMSprop(
+            lr=self.learning_rate,
+        )
+
+        super().__init__(
+            self.model_class,
+            self.optimizer,
+            topology,
+            self.batch_size,
+            self.epochs
+        )
+
 
 if __name__ == '__main__':
     pass
