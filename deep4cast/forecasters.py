@@ -94,12 +94,15 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly.
         self._is_fitted = True
 
-    def predict_point_estimate(self, ts):
+    def predict(self, ts, n_sample=1000, quantiles=(0.025,0.975)):
         """Generate predictions for input time series array ts.
-
-        :param ts: Time series array of shape (n_steps, n_variables)
-        :type ts: numpy.array
-
+           Output mean, median, quantile predictions and prediction samples
+            :param ts: Time series array of shape (n_steps, n_variables)
+            :type ts: numpy.array
+            :param n_sample: Number of prediction samples, at least 1
+            :type n_sample: int
+            :param quantiles: Tuple of quantiles to produce corresponding confidence interval
+            :type quantiles: Tuple of two floats from 0.0 to 1.0, e.g. (0.025, 0.975)
         """
         self._check_is_fitted()
         self._check_is_standardized()
@@ -110,10 +113,19 @@ class Forecaster():
         ts_standardized = ts_standardized.astype('float32')
         X = self._sequentialize(ts_standardized)[0]
 
-        # Undo standardization for correct scale of predicted values.
-        prediction = self._model.predict(X, self.batch_size)
-
-        return self._unstandardize(prediction)
+        prediction_samples = []
+        for _ in range(n_sample):
+            prediction = self._model.predict(X, self.batch_size)
+            prediction_samples.append(self._unstandardize(prediction))
+        
+        prediction_samples = np.array(prediction_samples)
+        lower_quantile = np.nanpercentile(prediction_samples, quantiles[0]*100, axis=0)
+        upper_quantile = np.nanpercentile(prediction_samples, quantiles[1]*100, axis=0)
+        median_prediction = np.nanpercentile(prediction_samples, 50.0, axis=0)
+        mean_prediction = np.mean(prediction_samples, axis=0)
+        return {'mean_prediction': mean_prediction, 'median_prediction': median_prediction,
+                'lower_quantile': lower_quantile, 'upper_quantile': upper_quantile,
+                'prediction_samples': prediction_samples}
 
     def _sequentialize(self, ts):
         """Sequentialize time series array."""
@@ -162,39 +174,6 @@ class Forecaster():
         """Raise error if model data was not standardized."""
         if not self._is_standardized:
             raise ValueError('The data has not been standardized.')
-
-    def predict_samples(self, ts, n_sample=1000, quantiles=(0.025,0.975)):
-        """Generate predictions for input time series array ts.
-           Output mean, median, quantile predictions and prediction samples
-            :param ts: Time series array of shape (n_steps, n_variables)
-            :type ts: numpy.array
-            :param n_sample: Number of prediction samples, at least 1
-            :type n_sample: int
-            :param quantiles: Tuple of quantiles to produce corresponding confidence interval
-            :type quantiles: Tuple of two floats from 0.0 to 1.0, e.g. (0.025, 0.975)
-        """
-        self._check_is_fitted()
-        self._check_is_standardized()
-        self._check_data_format(ts)
-
-        # Bring input into correct format for model train and prediction
-        ts_standardized = self._standardize(ts, locked=True)
-        ts_standardized = ts_standardized.astype('float32')
-        X = self._sequentialize(ts_standardized)[0]
-
-        prediction_samples = []
-        for _ in range(n_sample):
-            prediction = self._model.predict(X, self.batch_size)
-            prediction_samples.append(self._unstandardize(prediction))
-        
-        prediction_samples = np.array(prediction_samples)
-        lower_quantile = np.nanpercentile(prediction_samples, quantiles[0]*100, axis=0)
-        upper_quantile = np.nanpercentile(prediction_samples, quantiles[1]*100, axis=0)
-        median_prediction = np.nanpercentile(prediction_samples, 50.0, axis=0)
-        mean_prediction = np.mean(prediction_samples, axis=0)
-        return {'mean_prediction': mean_prediction, 'median_prediction': median_prediction,
-                'lower_quantile': lower_quantile, 'upper_quantile': upper_quantile,
-                'prediction_samples': prediction_samples}
 
 
 class CNNForecaster(Forecaster):

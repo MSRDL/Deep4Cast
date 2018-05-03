@@ -28,7 +28,7 @@ class LayeredTimeSeriesModel(Sequential):
 
     """
 
-    def __init__(self, input_shape, topology=None, dropout_rate=0.5):
+    def __init__(self, input_shape, topology=None, dropout_rate=0.1):
         """Initialize attributes."""
         self._input_shape = input_shape
         self._topology = topology
