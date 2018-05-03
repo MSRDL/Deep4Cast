@@ -16,7 +16,7 @@ def test_init_GRU(synthetic_data):
     assert model._topology == topology
     assert model._input_shape == synthetic_data.shape
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1
+    assert len(model.layers) == len(topology) + 1 + 1
 
 
 def test_init_LSTM(synthetic_data):
@@ -32,7 +32,7 @@ def test_init_LSTM(synthetic_data):
     assert model._topology == topology
     assert model._input_shape == synthetic_data.shape
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1
+    assert len(model.layers) == len(topology) + 1 + 1
 
 
 def test_init_Conv1D_deep(synthetic_data):
@@ -52,7 +52,7 @@ def test_init_Conv1D_deep(synthetic_data):
     assert model._topology == topology
     assert model._input_shape == synthetic_data.shape
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1
+    assert len(model.layers) == len(topology) + 1 + 1
 
 
 def test_init_LSTM_Conv1D(synthetic_data):
@@ -73,7 +73,7 @@ def test_init_LSTM_Conv1D(synthetic_data):
     assert model._topology == topology
     assert model._input_shape == synthetic_data.shape
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1
+    assert len(model.layers) == len(topology) + 1 + 1
 
 
 def test_init_Conv1D_GRU(synthetic_data):
@@ -87,7 +87,7 @@ def test_init_Conv1D_GRU(synthetic_data):
     assert model._topology == topology
     assert model._input_shape == synthetic_data.shape
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1
+    assert len(model.layers) == len(topology) + 1 + 1
 
 
 def test_init_Empty(synthetic_data):
