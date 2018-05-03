@@ -51,7 +51,7 @@ class Forecaster():
         self._is_fitted = False
         self._is_standardized = False
 
-    def fit(self, ts, lookback_period=10):
+    def fit(self, ts, lookback_period=10, verbose=2):
         """Fit model to data.
 
         :param ts: Time series array of shape (n_steps, n_variables)
@@ -88,7 +88,7 @@ class Forecaster():
             y,
             batch_size=self.batch_size,
             epochs=self.epochs,
-            verbose=0
+            verbose=verbose
         )
 
         # Change state to fitted so that other methods work correctly.
@@ -179,7 +179,7 @@ class Forecaster():
 class CNNForecaster(Forecaster):
     """Implementation of Forecaster as temporal CNN.
 
-    :param topology: Neural network topology. 
+    :param topology: Neural network topology.
     :type topology: list
     :param **kwargs: Hyperparameters(e.g., learning_rate, momentum, etc.).
     :type **kwargs: dict
