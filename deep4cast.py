@@ -3,12 +3,12 @@
 custom data sets.
 
 Example:
-    $python run.py --data-path "./data.csv" --test-fraction 0.1
+    $python deep4cast_shared_layer.py --data-path "./tutorials/timeseries_data.csv" --lookback_period 20 --test-fraction 0.1 --epochs 100
 
 """
 import argparse
 
-from deep4cast.forecasters import RNNForecaster
+from deep4cast.forecasters import CNNForecaster, RNNForecaster
 from pandas import read_table
 from deep4cast.utils import compute_mape
 
@@ -31,10 +31,69 @@ def main(args):
     else:
         ts_train = ts
 
-    # Build model with default topology. This can be changed for production
-    # purposes.
-    print("Fitting one-layer RNN with 128 units.")
-    topology = [('GRU', {'units': 128})]
+    # Test buidling a CNN
+    topology = [({'layer': 'Conv1D', 'id': 'c1', 'parent': 'input'},
+                 {'filters': 64, 'kernel_size': 5, 'activation': 'elu'}),
+                ({'layer': 'MaxPooling1D', 'id': 'mp1', 'parent': 'c1'},
+                 {'pool_size': 3, 'strides': 1}),
+                ({'layer': 'Conv1D', 'id': 'c2', 'parent': 'mp1'},
+                 {'filters': 64, 'kernel_size': 3, 'activation': 'elu'}),
+                ({'layer': 'MaxPooling1D', 'id': 'mp2', 'parent': 'c2'},
+                 {'pool_size': 4, 'strides': 2}),
+                ({'layer': 'Conv1D', 'id': 'c3', 'parent': 'mp2'},
+                 {'filters': 128, 'kernel_size': 3, 'activation': 'elu'}),
+                ({'layer': 'MaxPooling1D', 'id': 'mp3', 'parent': 'c3'},
+                 {'pool_size': 3, 'strides': 1}),
+                ({'layer': 'Flatten', 'id': 'f1', 'parent': 'mp3'},
+                 {}),
+                ({'layer': 'Dense', 'id': 'd1', 'parent': 'f1'},
+                 {'units': 128, 'activation': 'elu'}),
+                ({'layer': 'Dense', 'id': 'output', 'parent': 'd1'},
+                 {'units': 128, 'activation': 'elu'})]
+
+    forecaster = CNNForecaster(
+        topology,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        learning_rate=args.learning_rate
+    )
+    forecaster.fit(ts_train, lookback_period=args.lookback_period)
+
+    # Print errors to screen using a specified metric function
+    metric = compute_mape
+    if args.test_fraction:
+        print(
+            'TRAIN \t Mean Absolute Percentage Error: {0:.1f}%'.format(
+                metric(
+                    forecaster, ts_train, ts[args.lookback_period:train_length]
+                )
+            )
+        )
+        print(
+            'TEST \t Mean Absolute Percentage Error: {0:.1f}%'.format(
+
+                metric(
+                    forecaster, ts_test, ts[train_length:]
+                )
+            )
+        )
+    else:
+        print(
+            'TRAIN \t Mean Absolute Percentage Error: {0:.1f}%'.format(
+                metric(
+                    forecaster, ts_train, ts[args.lookback_period:]
+                )
+            )
+        )
+
+    # Test building a stacked GRU
+    topology = [({'layer': 'GRU', 'id': 'gru1', 'parent': 'input'},
+                 {'units': 128, 'return_sequences': True}),
+                ({'layer': 'GRU', 'id': 'gru1', 'parent': 'gru1'},
+                 {'units': 128, 'return_sequences': False}),
+                ({'layer': 'Dense', 'id': 'output', 'parent': 'gru1'},
+                 {'units': 1})]
+
     forecaster = RNNForecaster(
         topology,
         batch_size=args.batch_size,
@@ -113,7 +172,6 @@ if __name__ == '__main__':
                             required=False,
                             default=10,
                             type=int)
-
 
     named_args.add_argument('-lr',
                             '--learning-rate',

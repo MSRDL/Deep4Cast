@@ -129,16 +129,12 @@ class SharedLayerModel(Model):
             if 'kernel_initializer' in args:
                 params['kernel_initializer'] = self._rnd_init
 
-            # The 'return_squences' argument is necessary for stacking RNNs.
-            if 'return_sequences' in args and i < n_layers - 1:
-                params['return_sequences'] = True
-
             if meta['id'] is 'output':
                 params['units'] = self._input_shape[1]
 
             # Create Keras layer
-            layer = layer_cls(**params)(layers[meta['parent']])
-            layers[meta['id']] = layer
+            layers[meta['id']] = layer_cls(**params)(layers[meta['parent']])
+
         model = Model(layers['input'], layers['output'])
         self.inputs = model.inputs
         self.outputs = model.outputs

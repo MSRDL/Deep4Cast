@@ -177,7 +177,7 @@ class CNNForecaster(Forecaster):
 
     def __init__(self, topology, **kwargs):
         """Initialize properties."""
-        self.model_class = LayeredTimeSeriesModel
+        self.model_class = SharedLayerModel
         self.batch_size = 10
         self.epochs = 10
         self.learning_rate = 0.1
@@ -215,46 +215,6 @@ class CNNForecaster(Forecaster):
 
 
 class RNNForecaster(Forecaster):
-    """Implementation of Forecaster as truncated RNN.
-
-    :param topology: Neural network topology.
-    :type topology: dict
-    :param **kwargs: Hyperparameters(e.g., learning_rate, momentum, etc.).
-    :type **kwargs: dict
-
-    """
-
-    def __init__(self, topology, **kwargs):
-        """Initialize properties."""
-        self.model_class = LayeredTimeSeriesModel
-        self.batch_size = 10
-        self.epochs = 10
-        self.learning_rate = 0.01
-        allowed_args = (
-            'batch_size',
-            'epochs',
-            'learning_rate',
-        )
-        for arg, value in kwargs.items():
-            if arg in allowed_args:
-                setattr(self, arg, value)
-            else:
-                raise ValueError('Invalid keyword argument: {}.'.format(arg))
-
-        self.optimizer = RMSprop(
-            lr=self.learning_rate,
-        )
-
-        super().__init__(
-            self.model_class,
-            self.optimizer,
-            topology,
-            self.batch_size,
-            self.epochs
-        )
-
-
-class FlexibleForecaster(Forecaster):
     """Implementation of Forecaster as truncated RNN.
 
     :param topology: Neural network topology.
