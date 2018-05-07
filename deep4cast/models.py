@@ -25,6 +25,9 @@ class LayeredTimeSeriesModel(Sequential):
     :type input_shape: tuple
     :param topology: Neural network topology
     :type topology: list
+    :param dropout_rate:  Fraction of the units to drop for the linear
+        transformation of the inputs. Float between 0 and 1.
+    :type dropout_rate: float
 
     """
 
@@ -100,6 +103,13 @@ class SharedLayerModel(Model):
     :type input_shape: tuple
     :param topology: Neural network topology
     :type topology: list
+    :param uncertainty: What type of uncertainty. None = ignore uncertainty,
+        'all' = add dropout to every layer, 'last' = add dropout before 
+        output node.
+    :type uncertainty: string
+    :param dropout_rate:  Fraction of the units to drop for the linear
+        transformation of the inputs. Float between 0 and 1.
+    :type dropout_rate: float
 
     """
 
@@ -123,7 +133,7 @@ class SharedLayerModel(Model):
     def _build_layers(self):
         """Build model layers one layer at a time from topology."""
         layers = {}
-        # input layer
+        # create input layer using shape of data
         layers['input'] = keras.layers.Input(shape=self._input_shape)
         for i, (meta, params) in enumerate(self._topology):
             # Construct Keras layer to be built from string 'meta' which is
@@ -131,7 +141,7 @@ class SharedLayerModel(Model):
             layer_cls = getattr(keras.layers, meta['layer'])
 
             # In order to get the accepteble arguments for each layer we need
-            # to use inspect because of keras's legacy support decorators.
+            # to use inspect because of keras' legacy support decorators.
             try:
                 args = getargspec(layer_cls.__init__._original_function)[0]
             except AttributeError:
@@ -146,16 +156,28 @@ class SharedLayerModel(Model):
             if meta['id'] is 'output':
                 params['units'] = self._input_shape[1]
 
-            if self._uncertainty == None or (self._uncertainty == 'last' and not meta['id'] == 'output'):
-                layers[meta['id']] = layer_cls(**params)(layers[meta['parent']])
+            # Create the Keras layer accounting for uncertainty.
+            if self._uncertainty == None:
+                # Create Keras layer
+                layers[meta['id']] = layer_cls(
+                    **params)(layers[meta['parent']])
             elif self._uncertainty == 'all':
                 # Create Keras layer
-                layers[meta['id']] = layer_cls(**params)(layers[meta['parent']])
+                layers[meta['id']] = layer_cls(
+                    **params)(layers[meta['parent']])
+                # Add dropout
                 layers[meta['id']] = keras.layers.Dropout(
                     self._dropout_rate)(layers[meta['id']])
+            elif self._uncertainty == 'last' and not meta['id'] == 'output':
+                # Create Keras layer
+                layers[meta['id']] = layer_cls(
+                    **params)(layers[meta['parent']])
             elif self._uncertainty == 'last' and meta['id'] == 'output':
+                # Insert lambda dropout layer before output node
                 layers['lambda'] = keras.layers.core.Lambda(
-                    lambda x: K.dropout(x, level=self._dropout_rate))(layers[meta['parent']])
+                    lambda x: K.dropout(x, level=self._dropout_rate),
+                    output_shape=layers[meta['parent']].shape)(
+                    layers[meta['parent']])
                 # Create Keras layer
                 layers[meta['id']] = layer_cls(**params)(layers['lambda'])
 
