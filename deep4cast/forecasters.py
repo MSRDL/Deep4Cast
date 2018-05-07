@@ -5,10 +5,11 @@ This module provides access to forecasters that can be fit to univariate
 or multivariate time series given as arrays.
 
 """
+
 import numpy as np
 
 from keras.optimizers import RMSprop, SGD
-from .models import LayeredTimeSeriesModel
+from .models import SharedLayerModel
 
 
 class Forecaster():
@@ -26,12 +27,21 @@ class Forecaster():
 
     """
 
-    def __init__(self, model_class, optimizer, topology, batch_size, epochs):
+    def __init__(self,
+                 model_class,
+                 optimizer,
+                 topology,
+                 batch_size,
+                 epochs,
+                 uncertainty,
+                 dropout_rate):
         """Initialize properties."""
 
         # Attributes related to neural network model
         self.model_class = model_class
         self.topology = topology
+        self.uncertainty = uncertainty
+        self.dropout_rate = dropout_rate
         self._model = None
 
         # Attributes related to model training
@@ -77,12 +87,15 @@ class Forecaster():
         self._model = self.model_class(
             input_shape=X.shape[1:],
             topology=self.topology,
+            uncertainty=self.uncertainty,
+            dropout_rate=self.dropout_rate
         )
         self._model.compile(
             loss=self._loss,
             optimizer=self.optimizer,
             metrics=self._metrics
         )
+        print(self._model.summary())
         self.history = self._model.fit(
             X,
             y,
@@ -94,7 +107,7 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly.
         self._is_fitted = True
 
-    def predict(self, ts, n_sample=1000, quantiles=(0.025,0.975)):
+    def predict(self, ts, n_sample=100, quantiles=(0.025, 0.975)):
         """Generate predictions for input time series array ts.
            Output mean, median, quantile predictions and prediction samples
             :param ts: Time series array of shape (n_steps, n_variables)
@@ -117,14 +130,18 @@ class Forecaster():
         for _ in range(n_sample):
             prediction = self._model.predict(X, self.batch_size)
             prediction_samples.append(self._unstandardize(prediction))
-        
+
         prediction_samples = np.array(prediction_samples)
-        lower_quantile = np.nanpercentile(prediction_samples, quantiles[0]*100, axis=0)
-        upper_quantile = np.nanpercentile(prediction_samples, quantiles[1]*100, axis=0)
+        lower_quantile = np.nanpercentile(
+            prediction_samples, quantiles[0]*100, axis=0)
+        upper_quantile = np.nanpercentile(
+            prediction_samples, quantiles[1]*100, axis=0)
         median_prediction = np.nanpercentile(prediction_samples, 50.0, axis=0)
         mean_prediction = np.mean(prediction_samples, axis=0)
-        return {'mean_prediction': mean_prediction, 'median_prediction': median_prediction,
-                'lower_quantile': lower_quantile, 'upper_quantile': upper_quantile,
+        return {'mean_prediction': mean_prediction,
+                'median_prediction': median_prediction,
+                'lower_quantile': lower_quantile,
+                'upper_quantile': upper_quantile,
                 'prediction_samples': prediction_samples}
 
     def _sequentialize(self, ts):
@@ -188,20 +205,24 @@ class CNNForecaster(Forecaster):
 
     def __init__(self, topology, **kwargs):
         """Initialize properties."""
-        self.model_class = LayeredTimeSeriesModel
+        self.model_class = SharedLayerModel
         self.batch_size = 10
         self.epochs = 10
         self.learning_rate = 0.1
         self.momentum = 0.9
         self.decay = 0.1
         self.nesterov = False
+        self.uncertainty = None
+        self.dropout_rate = 0.1
         allowed_args = (
             'batch_size',
             'epochs',
             'learning_rate',
             'momentum',
-            'decay'
-            'nesterov'
+            'decay',
+            'nesterov',
+            'uncertainty',
+            'dropout_rate'
         )
         for arg, value in kwargs.items():
             if arg in allowed_args:
@@ -221,7 +242,9 @@ class CNNForecaster(Forecaster):
             self.optimizer,
             topology,
             self.batch_size,
-            self.epochs
+            self.epochs,
+            self.uncertainty,
+            self.dropout_rate
         )
 
 
@@ -237,14 +260,18 @@ class RNNForecaster(Forecaster):
 
     def __init__(self, topology, **kwargs):
         """Initialize properties."""
-        self.model_class = LayeredTimeSeriesModel
+        self.model_class = SharedLayerModel
         self.batch_size = 10
         self.epochs = 10
         self.learning_rate = 0.01
+        self.uncertainty = None
+        self.dropout_rate = 0.1
         allowed_args = (
             'batch_size',
             'epochs',
             'learning_rate',
+            'uncertainty',
+            'dropout_rate'
         )
         for arg, value in kwargs.items():
             if arg in allowed_args:
@@ -261,7 +288,9 @@ class RNNForecaster(Forecaster):
             self.optimizer,
             topology,
             self.batch_size,
-            self.epochs
+            self.epochs,
+            self.uncertainty,
+            self.dropout_rate
         )
 
 
