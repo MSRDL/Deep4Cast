@@ -16,5 +16,5 @@ def compute_mape(forecaster, ts, ts_truth):
 
     """
 
-    ts_pred = forecaster.predict(ts)
+    ts_pred = forecaster.predict(ts)['mean_prediction']
     return np.mean(np.abs((ts_pred - ts_truth) / ts_truth)) * 100.0
