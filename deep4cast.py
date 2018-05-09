@@ -32,6 +32,8 @@ def main(args):
     else:
         ts_train = ts
 
+
+    # Why isn't topology an option?
     print('\n\nBuild a CNN wihtout uncertainty:')
     topology = [({'layer': 'Conv1D', 'id': 'c1', 'parent': 'input'},
                  {'filters': 64, 'kernel_size': 5, 'activation': 'elu'}),
@@ -83,56 +85,48 @@ def main(args):
         )
 
 
-if __name__ == '__main__':
-    # Collect all relevant command line arugments
+# Putting the parser out makes it easier to change the parameters from within a Python script/function.
+# https://gist.github.com/zer0n/d11cc130c5a35fabd6e1be961ead8576 is an example.
+def _get_parser():
+    # Collect all relevant command line arguments
     parser = argparse.ArgumentParser()
     named_args = parser.add_argument_group('named arguments')
 
-    named_args.add_argument('-d',
-                            '--data-path',
-                            metavar='|',
-                            help="""Location of data set""",
+    named_args.add_argument('-d', '--data-path',
+                            help="Location of data set",
                             required=True,
                             type=str)
 
-    named_args.add_argument('-tf',
-                            '--test-fraction',
-                            metavar='|',
-                            help="""Test fraction at end of dataset""",
+    named_args.add_argument('-tf', '--test-fraction',
+                            help="Test fraction at end of dataset",
                             required=False,
                             default=None,
                             type=float)
 
-    named_args.add_argument('-lb',
-                            '--lookback_period',
-                            metavar='|',
-                            help="""Lookback period""",
+    named_args.add_argument('-lb', '--lookback_period',
+                            help="Lookback period",
                             required=True,
                             type=int)
 
-    named_args.add_argument('-e',
-                            '--epochs',
-                            metavar='|',
-                            help="""Number of epochs to run""",
+    named_args.add_argument('-e', '--epochs',
+                            help="Number of epochs to run",
                             required=False,
                             default=100,
                             type=int)
 
-    named_args.add_argument('-b',
-                            '--batch-size',
-                            metavar='|',
-                            help="""Location of validation data""",
+    named_args.add_argument('-b', '--batch-size',
+                            help="Location of validation data",
                             required=False,
                             default=8,
                             type=int)
 
-    named_args.add_argument('-lr',
-                            '--learning-rate',
-                            metavar='|',
-                            help="""Learning rate""",
+    named_args.add_argument('-lr', '--learning-rate',
+                            help="Learning rate",
                             required=False,
                             default=0.1,
                             type=float)
 
-    args = parser.parse_args()
+
+if __name__ == '__main__':
+    args = _get_parser().parse_args()
     main(args)

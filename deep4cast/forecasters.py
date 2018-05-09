@@ -26,7 +26,7 @@ class Forecaster():
     :type epochs: int
     :param uncertainty: What type of uncertainty. None = ignore uncertainty,
         'all' = add dropout to every layer, 'last' = add dropout before 
-        output node.
+        output node. #ToDo: 'last' is not generic and doesn't sensible either.
     :type uncertainty: string
     :param dropout_rate:  Fraction of the units to drop for the linear
         transformation of the inputs. Float between 0 and 1.
@@ -39,8 +39,8 @@ class Forecaster():
                  optimizer,
                  topology,
                  batch_size,
-                 epochs,
-                 uncertainty,
+                 epochs: int,
+                 uncertainty: str, #ToDo: indicate the parameter type here, not in docstring
                  dropout_rate):
         """Initialize properties."""
 
@@ -68,6 +68,8 @@ class Forecaster():
         self._is_fitted = False
         self._is_standardized = False
 
+
+    # REVIEW: the more commonly used term for `lookback_period` is `lag`.
     def fit(self, ts, lookback_period=10, verbose=2):
         """Fit model to data.
 
@@ -205,6 +207,10 @@ class Forecaster():
             raise ValueError('The data has not been standardized.')
 
 
+# Review: simplify the code by having just one Forecaster class. The network topology can be passed in as an argument.
+# We can have a few pre-defined networks such as RNN, CNN, LSTNet, etc.from
+# Example command-line usage would be:
+#   python deep4cast.py --data-path data.csv --network rnn ...
 class CNNForecaster(Forecaster):
     """Implementation of Forecaster as temporal CNN.
 
