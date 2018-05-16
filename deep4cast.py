@@ -38,7 +38,6 @@ def main(args):
     else:
         ts_train = ts
 
-    print(args.uncertainty)
     forecaster = Forecaster(
         args.network_type,
         optimizer='sgd',
