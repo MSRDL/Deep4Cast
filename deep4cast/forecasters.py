@@ -124,7 +124,6 @@ class Forecaster():
         )
 
         # Print the model topology and parameters before fitting.
-        print(self._model.summary())
         self.history = self._model.fit(
             X,
             y,
@@ -135,6 +134,7 @@ class Forecaster():
 
         # Change state to fitted so that other methods work correctly.
         self._is_fitted = True
+        self.summary = self._model.summary
 
     def predict(self, data, n_samples=100, quantiles=(5, 95)):
         """Generate predictions for input time series numpy array.
