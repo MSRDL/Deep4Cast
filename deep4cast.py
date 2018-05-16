@@ -38,77 +38,9 @@ def main(args):
     else:
         ts_train = ts
 
-    topology = [
-        {
-            'meta': {
-                'layer_type': 'Conv1D',
-                'layer_id': 'c1',
-                'parent_ids': ['input']
-            },
-            'params': {
-                'filters': 64,
-                'kernel_size': 5,
-                'activation': 'elu'
-            }
-        },
-        {
-            'meta': {
-                'layer_type': 'Conv1D',
-                'layer_id': 'c2',
-                'parent_ids': ['c1']
-            },
-            'params': {
-                'filters': 64,
-                'kernel_size': 3,
-                'activation': 'elu'
-            }
-        },
-        {
-            'meta': {
-                'layer_type': 'Conv1D',
-                'layer_id': 'c3',
-                'parent_ids': ['c2']
-            },
-            'params': {
-                'filters': 128,
-                'kernel_size': 3,
-                'activation': 'elu'
-            }
-        },
-        {
-            'meta': {
-                'layer_type': 'Flatten',
-                'layer_id': 'f1',
-                'parent_ids': ['c3']
-            },
-            'params': {}
-        },
-        {
-            'meta': {
-                'layer_type': 'Dense',
-                'layer_id': 'd1',
-                'parent_ids': ['f1']
-            },
-            'params': {
-                'units': 128,
-                'activation': 'elu'
-            }
-        },
-        {
-            'meta': {
-                'layer_type': 'Dense',
-                'layer_id': 'd2',
-                'parent_ids': ['d1']
-            },
-            'params': {
-                'units': 128,
-                'activation': 'elu'
-            }
-        }
-    ]
-
+    print(args.uncertainty)
     forecaster = Forecaster(
-        topology,
+        args.network_type,
         optimizer='sgd',
         lag=args.lag,
         horizon=args.horizon,
@@ -160,6 +92,17 @@ def _get_parser():
                             required=True,
                             type=str)
 
+    named_args.add_argument('-nt', '--network_type',
+                            help="Network topology type",
+                            required=True,
+                            type=str)
+
+    named_args.add_argument('-o', '--optimizer',
+                            help="Optimizer type",
+                            required=False,
+                            default='sgd',
+                            type=str)
+
     named_args.add_argument('-tf', '--test-fraction',
                             help="Test fraction at end of dataset",
                             required=False,
@@ -186,7 +129,7 @@ def _get_parser():
     named_args.add_argument('-b', '--batch-size',
                             help="Number of training batches",
                             required=False,
-                            default=8,
+                            default=10,
                             type=int)
 
     named_args.add_argument('-u', '--uncertainty',

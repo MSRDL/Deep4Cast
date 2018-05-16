@@ -11,6 +11,7 @@ import numpy as np
 import keras.optimizers
 
 from .models import SharedLayerModel
+from .topologies import get_topology
 
 
 class Forecaster():
@@ -46,7 +47,7 @@ class Forecaster():
 
         # Attributes related to neural network model
         self.model_class = SharedLayerModel
-        self.topology = topology
+        self.topology = self._build_topology(topology)
         self.uncertainty = uncertainty
         self.dropout_rate = dropout_rate
         self._model = None
@@ -219,13 +220,21 @@ class Forecaster():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
 
+    @staticmethod
+    def _build_topology(topology):
+        """Return topology depending on user input (str or list)."""
+        if isinstance(topology, str):
+            return get_topology(topology)
+        if isinstance(topology, list):
+            return topology
+
     def _sequentialize(self, data):
         """Sequentialize time series array.
         Create two numpy arrays, one for the windowed input time series X
         and one for the corresponding output values that need to be
         predicted.
         """
-        n_steps = data.shape[0]
+        n_time_steps = data.shape[0]
         n_series = data.shape[2]  # number of distinct time series to train on
         horizon = self.horizon  # Redefine variable to keep visual noise low
         lag = self.lag  # Redefine variable to keep visual noise low
@@ -235,8 +244,8 @@ class Forecaster():
         # sequences.
         X, y = [], []
         for i in range(n_series):
-            for j in range(n_steps - lag):
-                if j + lag + horizon <= n_steps:
+            for j in range(n_time_steps - lag):
+                if j + lag + horizon <= n_time_steps:
                     X.append(data[j:j + lag, :, i])
 
                     # Target indices for forecasting
@@ -249,7 +258,10 @@ class Forecaster():
         # Make sure to return numpy arrays not lists.
         if not X or not y:
             raise ValueError(
-                'Check if time series is too short for lag and horizon.'
+                'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
+                    lag, horizon,
+                    n_time_steps
+                )
             )
         return np.array(X), np.array(y)
 
