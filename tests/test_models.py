@@ -2,99 +2,209 @@
 
 from fixtures import synthetic_data
 
-from deep4cast.models import LayeredTimeSeriesModel
+from deep4cast.models import SharedLayerModel
 
 
-def test_init_GRU(synthetic_data):
+def test_defaults(synthetic_data):
+    # Get the data
     X = synthetic_data
+
     topology = [
-        ('GRU', {'units': 128, 'activation': 'tanh'}),
-        ('GRU', {'units': 35, 'activation': 'tanh'})
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru1',
+                'parent_ids': ['input']},
+            'params': {
+                'units': 128,
+                'return_sequences': True
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru2',
+                'parent_ids': ['gru1']
+            },
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        }
     ]
-    model = LayeredTimeSeriesModel(X.shape, topology)
 
+    # Instantiate model
+    input_shape = X.shape[:2]
+    output_shape = (21, 2)
+    model = SharedLayerModel(input_shape, output_shape, topology)
+
+    # Check all (!) instance parameters
     assert model._topology == topology
-    assert model._input_shape == synthetic_data.shape
+    assert model._input_shape == X.shape[:2]
+    assert model._output_shape == (21, 2)
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1 + 1
+    assert not model._uncertainty
+    assert model._dropout_rate == 0.1
+    assert len(model.layers) == len(topology) + 3  # Account for input layer
 
 
-def test_init_LSTM(synthetic_data):
+def test_defaults_mcdropout(synthetic_data):
+    # Get the data
     X = synthetic_data
+
     topology = [
-        ('LSTM', {'units': 12, 'activation': 'relu'}),
-        ('LSTM', {'units': 127, 'activation': 'relu'}),
-        ('LSTM', {'units': 127, 'activation': 'relu'}),
-        ('LSTM', {'units': 5, 'activation': 'relu'})
+        {
+            'meta': {
+                'layer_type': 'Conv1D',
+                'layer_id': 'c1',
+                'parent_ids': ['input']},
+            'params': {
+                'filters': 64,
+                'kernel_size': 3
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru2',
+                'parent_ids': ['c1']
+            },
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        }
     ]
-    model = LayeredTimeSeriesModel(X.shape, topology)
 
+    # Instantiate model
+    input_shape = X.shape[:2]
+    output_shape = (21, 3)
+    model = SharedLayerModel(
+        input_shape,
+        output_shape,
+        topology,
+        uncertainty=True
+    )
+
+    # Check all (!) instance parameters
     assert model._topology == topology
-    assert model._input_shape == synthetic_data.shape
+    assert model._input_shape == X.shape[:2]
+    assert model._output_shape == (21, 3)
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1 + 1
+    assert model._uncertainty
+    assert model._dropout_rate == 0.1
+    assert len(model.layers) == len(topology) + 6  # Account for input layer
 
 
-def test_init_Conv1D_deep(synthetic_data):
+def test_concat_default(synthetic_data):
+    # Get the data
     X = synthetic_data
+
     topology = [
-        ('Conv1D', {'filters': 64, 'kernel_size': 5, 'activation': 'relu'}),
-        ('MaxPooling1D', {'pool_size': 3, 'strides': 1}),
-        ('Conv1D', {'filters': 67, 'kernel_size': 4, 'activation': 'relu'}),
-        ('MaxPooling1D', {'pool_size': 3, 'strides': 1}),
-        ('Conv1D', {'filters': 128, 'kernel_size': 6, 'activation': 'relu'}),
-        ('MaxPooling1D', {'pool_size': 2, 'strides': 2}),
-        ('Flatten', {}),
-        ('Dense', {'units': 128})
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru1',
+                'parent_ids': ['input']},
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru2',
+                'parent_ids': ['input']
+            },
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'Concatenate',
+                'layer_id': 'concat1',
+                'parent_ids': ['gru1', 'gru2']
+            },
+            'params': {
+                'axis': -1
+            }
+        }
     ]
-    model = LayeredTimeSeriesModel(X.shape, topology)
 
+    # Instantiate model
+    input_shape = X.shape[:2]
+    output_shape = (21, 2)
+    model = SharedLayerModel(
+        input_shape,
+        output_shape,
+        topology,
+        uncertainty=False
+    )
+
+    # Check all (!) instance parameters
     assert model._topology == topology
-    assert model._input_shape == synthetic_data.shape
+    assert model._input_shape == X.shape[:2]
+    assert model._output_shape == (21, 2)
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1 + 1
+    assert not model._uncertainty
+    assert model._dropout_rate == 0.1
 
 
-def test_init_LSTM_Conv1D(synthetic_data):
+def test_concat_concat(synthetic_data):
+    # Get the data
     X = synthetic_data
+
     topology = [
-        ('LSTM', {'units': 127}),
-        ('Conv1D', {'filters': 64, 'kernel_size': 5, 'activation': 'elu'}),
-        ('MaxPooling1D', {'pool_size': 3, 'strides': 1}),
-        ('Conv1D', {'filters': 67, 'kernel_size': 4, 'activation': 'elu'}),
-        ('MaxPooling1D', {'pool_size': 3, 'strides': 1}),
-        ('Conv1D', {'filters': 128, 'kernel_size': 6, 'activation': 'elu'}),
-        ('MaxPooling1D', {'pool_size': 2, 'strides': 2}),
-        ('Flatten', {}),
-        ('Dense', {'units': 128})
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru1',
+                'parent_ids': ['input']},
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'GRU',
+                'layer_id': 'gru2',
+                'parent_ids': ['input']
+            },
+            'params': {
+                'units': 128,
+                'return_sequences': False
+            }
+        },
+        {
+            'meta': {
+                'layer_type': 'Concatenate',
+                'layer_id': 'concat1',
+                'parent_ids': ['gru1', 'gru2']
+            },
+            'params': {
+                'axis': -1
+            }
+        }
     ]
-    model = LayeredTimeSeriesModel(X.shape, topology)
 
+    # Instantiate model
+    input_shape = X.shape[:2]
+    output_shape = (21, 10)
+    model = SharedLayerModel(
+        input_shape,
+        output_shape,
+        topology,
+        uncertainty=True
+    )
+
+    # Check all (!) instance parameters
     assert model._topology == topology
-    assert model._input_shape == synthetic_data.shape
+    assert model._input_shape == X.shape[:2]
+    assert model._output_shape == (21, 10)
     assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1 + 1
-
-
-def test_init_Conv1D_GRU(synthetic_data):
-    X = synthetic_data
-    topology = [
-        ('Conv1D', {'filters': 64, 'kernel_size': 5, 'activation': 'elu'}),
-        ('GRU', {'units': 128, 'activation': 'tanh'}),
-    ]
-    model = LayeredTimeSeriesModel(X.shape, topology)
-
-    assert model._topology == topology
-    assert model._input_shape == synthetic_data.shape
-    assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == len(topology) + 1 + 1
-
-
-def test_init_Empty(synthetic_data):
-    X = synthetic_data
-    model = LayeredTimeSeriesModel(X.shape)
-
-    assert not model._topology
-    assert model._input_shape == synthetic_data.shape
-    assert model._rnd_init == 'glorot_normal'
-    assert len(model.layers) == 1
+    assert model._uncertainty
+    assert model._dropout_rate == 0.1

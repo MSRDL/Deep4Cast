@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """Time series forecasting module.
 
-This module provides access to forecasters that can be fit to univariate
-or multivariate time series given as arrays.
+This module provides access to forecasters that can be fit multivariate time
+series given as numpy arrays.
 
 """
+from inspect import getargspec
 
 import numpy as np
+import keras.optimizers
 
-from keras.optimizers import RMSprop, SGD
 from .models import SharedLayerModel
+from .topologies import get_topology
 
 
 class Forecaster():
@@ -17,96 +19,111 @@ class Forecaster():
     :param model_class: Neural network model class.
     :type model_class: keras model
     :param optimizer: Neural network optimizer.
-    :type optimizer: keras optimizer
+    :type optimizer: string
     :param topology: Neural network topology.
     :type topology: list
-    :param batch_size: Train batch size.
+    :param batch_size: Training batch size.
     :type batch_size: int
     :param epochs: Number of training epochs.
     :type epochs: int
-    :param uncertainty: What type of uncertainty. None = ignore uncertainty,
-        'all' = add dropout to every layer, 'last' = add dropout before 
-        output node. #ToDo: 'last' is not generic and doesn't sensible either.
-    :type uncertainty: string
-    :param dropout_rate:  Fraction of the units to drop for the linear
-        transformation of the inputs. Float between 0 and 1.
+    :param uncertainty: True if applying MC Dropout after every layer.
+    :type uncertainty: boolean
+    :param dropout_rate: Probability of dropping a node during Dropout.
     :type dropout_rate: float
 
     """
 
     def __init__(self,
-                 model_class,
-                 optimizer,
                  topology,
-                 batch_size,
+                 optimizer: str,
+                 lag: int,
+                 horizon: int,
+                 batch_size: int,
                  epochs: int,
-                 uncertainty: str, #ToDo: indicate the parameter type here, not in docstring
-                 dropout_rate):
+                 uncertainty=False,
+                 dropout_rate=0.1,
+                 **kwargs):
         """Initialize properties."""
 
         # Attributes related to neural network model
-        self.model_class = model_class
-        self.topology = topology
+        self.model_class = SharedLayerModel
+        self.topology = self._build_topology(topology)
         self.uncertainty = uncertainty
         self.dropout_rate = dropout_rate
         self._model = None
 
         # Attributes related to model training
-        self.optimizer = optimizer or SGD(lr=0.01)
+        self.optimizer = optimizer
+        self.set_optimizer_args(kwargs)
+
+        self.lag = lag
+        self.horizon = horizon
         self.batch_size = batch_size
         self.epochs = epochs
         self.history = None
-        self._loss = 'mse'
-        self._metrics = ['mape']
+        self.loss = 'mse'
+        self.metrics = ['mape']
+        self.seed = None
+        self._tags = None
 
         # Attributes related to input data (these are set during fitting)
-        self.lookback_period = None
-        self.data_means = None
-        self.data_stds = None
+        self._data_means = None
+        self._data_scales = None
 
         # Boolean checks
         self._is_fitted = False
         self._is_standardized = False
 
-
-    # REVIEW: the more commonly used term for `lookback_period` is `lag`.
-    def fit(self, ts, lookback_period=10, verbose=2):
+    def fit(self, data, tags=None, verbose=0):
         """Fit model to data.
 
-        :param ts: Time series array of shape (n_steps, n_variables)
-        :type ts: numpy.array
-        :param lookback_period: Length of time series window for model input
-        :type lookback_period: int
+        :param data: Time series array of shape (n_steps, n_variables).
+        :type data: numpy.array
+        :param tags: Dict that contains the indices of targets and covariates.
+        :type tags: dict
         :param verbose: Verbosity mode. 0 = silent, 1 = progress bar,
             2 = one line per epoch.
         :type verbose: int
 
         """
-        self.lookback_period = lookback_period
-        self._check_data_format(ts)
+        self._check_data_format(data)
 
-        # When data format has been succesfully checked standardize.
-        ts_standardized = self._standardize(ts)
-        ts_standardized = ts_standardized.astype('float32')
+        # We sometimes want to fix the pseudo random number generator seed
+        # when we are debugging.
+        if self.seed:
+            np.random.seed(self.seed)
+
+        # Store a dictionary of lists that contain the indicies of
+        # target variables, dynamic, and static covariates.
+        self._tags = tags
+
+        # When data format has been succesfully checked standardize it.
+        data_standardized = self._standardize(data)
+        data_standardized = data_standardized.astype('float32')
 
         # The model expects input-output data pairs, so we create them from
         # the standardized time series arrary by windowing. Xs are 3D tensors
-        # of shape number of steps * lookback_period * dimensionality and
-        # ys are 2D tensors of lookback_period * dimensionality.
-        X, y = self._sequentialize(ts_standardized)
+        # of shape number of steps * lag * dimensionality and
+        # ys are 2D tensors of lag * dimensionality.
+        X, y = self._sequentialize(data_standardized)
 
         # Set up the model based on internal model class.
         self._model = self.model_class(
             input_shape=X.shape[1:],
+            output_shape=y.shape[1:],
             topology=self.topology,
             uncertainty=self.uncertainty,
             dropout_rate=self.dropout_rate
         )
+
+        # Keras needs to compile the comuptational graph before fitting.
         self._model.compile(
-            loss=self._loss,
-            optimizer=self.optimizer,
-            metrics=self._metrics
+            loss=self.loss,
+            optimizer=self._optimizer,
+            metrics=self.metrics
         )
+
+        # Print the model topology and parameters before fitting.
         print(self._model.summary())
         self.history = self._model.fit(
             X,
@@ -119,82 +136,198 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly.
         self._is_fitted = True
 
-    def predict(self, ts, n_sample=1000, quantiles=(0.025, 0.975)):
-        """Generate predictions for input time series array ts.
-           Output mean, median, quantile predictions and prediction samples
-            :param ts: Time series array of shape (n_steps, n_variables)
-            :type ts: numpy.array
-            :param n_sample: Number of prediction samples, at least 1
-            :type n_sample: int
-            :param quantiles: Tuple of quantiles to produce corresponding
-                confidence interval
-            :type quantiles: Tuple of two floats from 0.0 to 1.0,
-                e.g. (0.025, 0.975)
+    def predict(self, data, n_samples=100, quantiles=(5, 95)):
+        """Generate predictions for input time series numpy array.
+
+        :param data: Time series array of shape (n_steps, n_variables).
+        :type data: numpy.array
+        :param n_samples: Number of prediction samples (>= 1).
+        :type n_samples: int
+        :param quantiles: Tuple of quantiles for credicble interval.
+        :type quantiles: tuple
+
         """
+        n_series = data.shape[2]  # number of distinct time series to train on
+
         self._check_is_fitted()
         self._check_is_standardized()
-        self._check_data_format(ts)
+        self._check_data_format(data)
 
         # Bring input into correct format for model train and prediction
-        ts_standardized = self._standardize(ts, locked=True)
-        ts_standardized = ts_standardized.astype('float32')
-        X = self._sequentialize(ts_standardized)[0]
+        data_standardized = self._standardize(data, locked=True)
+        data_standardized = data_standardized.astype('float32')
+        X = self._sequentialize(data_standardized)[0]  # Only get inputs
 
-        prediction_samples = []
-        for _ in range(n_sample):
-            prediction = self._model.predict(X, self.batch_size)
-            prediction_samples.append(self._unstandardize(prediction))
+        # Repeat the prediction n_samples times to generate samples from
+        # approximate posterior predictive distribution.
+        samples = []
+        for _ in range(n_samples):
+            prediction = []
+            raw_prediction = self._model.predict(X, self.batch_size)
 
-        prediction_samples = np.array(prediction_samples)
-        lower_quantile = np.nanpercentile(
-            prediction_samples, quantiles[0]*100, axis=0)
-        upper_quantile = np.nanpercentile(
-            prediction_samples, quantiles[1]*100, axis=0)
-        median_prediction = np.nanpercentile(prediction_samples, 50.0, axis=0)
-        mean_prediction = np.mean(prediction_samples, axis=0)
-        return {'mean_prediction': mean_prediction,
-                'median_prediction': median_prediction,
+            # We need to reashape the raw_predictios in case the forecasting
+            # horizon is larger than 1 and in case more than one time series
+            # is fed into the model.The Keras model has no
+            # intrinsic notion of horizon.s
+            stride = int(len(raw_prediction) / n_series)  # reshaping stride
+            for i in range(n_series):
+                # Extract the prediciton for each individual series
+                prediction.append(
+                    raw_prediction[i * stride:(i + 1) * stride].T
+                )
+            prediction = np.array(prediction)
+
+            # Reshape according to horizon length. Needs to happen to undo
+            # standadization.
+            if self.horizon == 1:
+                prediction = np.swapaxes(prediction, 0, 2)
+            else:
+                prediction = np.swapaxes(prediction, 0, 3)
+                prediction = np.swapaxes(prediction, 1, 2)
+
+            samples.append(self._unstandardize(prediction))
+
+        samples = np.array(samples)
+
+        # Turn samples into quantiles for easier display later.
+        lower_quantile = np.nanpercentile(samples, quantiles[0], axis=0)
+        upper_quantile = np.nanpercentile(samples, quantiles[1], axis=0)
+        median_prediction = np.nanpercentile(samples, 50, axis=0)
+        mean_prediction = np.mean(samples, axis=0)
+
+        return {'mean': mean_prediction,
+                'median': median_prediction,
                 'lower_quantile': lower_quantile,
                 'upper_quantile': upper_quantile,
-                'prediction_samples': prediction_samples}
+                'samples': samples}
 
-    def _sequentialize(self, ts):
-        """Sequentialize time series array."""
-        # Create two numpy arrays, one for the windowed input time series X
-        # and one for the corresponding output values that need to be
-        # predicted.
-        d = self.lookback_period
-        X = [ts[i:i + d] for i in range(len(ts) - d)]
-        y = [ts[i + d] for i in range(len(ts) - d)]
+    @property
+    def optimizer(self):
+        """Return the optimizer name."""
+        return self._optimizer.__class__.__name__
 
+    @optimizer.setter
+    def optimizer(self, optimizer):
+        """Instantiate the optimizer."""
+        optimizer_class = getattr(keras.optimizers, optimizer)
+        self._optimizer = optimizer_class()
+
+    def set_optimizer_args(self, params):
+        """Set optimizer attributes."""
+        optimizer_class = self._optimizer.__class__
+        optimizer_args = getargspec(optimizer_class)[0]
+        for key, value in params.items():
+            if key in optimizer_args:
+                setattr(self._optimizer, key, value)
+
+    @staticmethod
+    def _build_topology(topology):
+        """Return topology depending on user input (str or list)."""
+        if isinstance(topology, str):
+            return get_topology(topology)
+        if isinstance(topology, list):
+            return topology
+
+    def _sequentialize(self, data):
+        """Sequentialize time series array.
+        Create two numpy arrays, one for the windowed input time series X
+        and one for the corresponding output values that need to be
+        predicted.
+        """
+        n_time_steps = data.shape[0]
+        n_series = data.shape[2]  # number of distinct time series to train on
+        horizon = self.horizon  # Redefine variable to keep visual noise low
+        lag = self.lag  # Redefine variable to keep visual noise low
+        tags = self._tags
+
+        # Sequentialize the dataset, i.e., split it into shorter windowed
+        # sequences.
+        X, y = [], []
+        for i in range(n_series):
+            for j in range(n_time_steps - lag):
+                if j + lag + horizon <= n_time_steps:
+                    X.append(data[j:j + lag, :, i])
+
+                    # Target indices for forecasting
+                    target_inds = range(j + lag, j + lag + horizon)
+                    if tags:
+                        y.append(data[target_inds, tags['targets'], i])
+                    else:
+                        y.append(np.squeeze(data[target_inds, :, i]))
+
+        # Make sure to return numpy arrays not lists.
+        if not X or not y:
+            raise ValueError(
+                'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
+                    lag, horizon,
+                    n_time_steps
+                )
+            )
         return np.array(X), np.array(y)
 
-    def _standardize(self, ts, locked=False):
-        """Standardize numpy array in a NaN-friendly way."""
+    def _standardize(self, data, locked=False):
+        """Standardize numpy array in a NaN-friendly way.
+
+        :param data: Input time series.
+        :type data: numpy array
+        :param data: Boolean that locks down the scales of the data.
+        :type data: boolean
+
+        """
         # Use numpy.nanmean/nanstd to handle potential nans when
         # when standardizing data. Make sure to keep a lock on
         # internal variables during prediction step.
         if not locked:
-            self.data_means = np.nanmean(ts, axis=0)
-            self.data_stds = np.nanmean(ts, axis=0)
+            # By default the data scale is set by the standard deviation,
+            # but we need to handle the case where the standard deviation
+            # or the mean is zero.
+            means = np.nanmean(data, axis=0)
+            scales = np.nanstd(data, axis=0)
+
+            # Check for small scales in stds.
+            ind = np.where(scales < 1e-16)
+            scales[ind] = means[ind]
+
+            # Check again for means.
+            ind = np.where(scales < 1e-16)
+            scales[ind] = 1.0
+
+            self._data_means = means
+            self._data_scales = scales
             self._is_standardized = True
         else:
             self._check_is_standardized()
-        return (ts - self.data_means) / self.data_stds
 
-    def _unstandardize(self, ts):
+        return (data - self._data_means) / self._data_scales
+
+    def _unstandardize(self, data):
         """Un-standardize numpy array."""
         self._check_is_standardized()
-        return ts * self.data_stds + self.data_means
 
-    @staticmethod
-    def _check_data_format(ts):
+        # Unstandardize taking presence of covariates into account.
+        if self._tags:
+            means = self._data_means[self._tags['targets']]
+            scales = self._data_scales[self._tags['targets']]
+            return data * scales + means
+        else:
+            return data * self._data_scales + self._data_means
+
+    def _check_data_format(self, data, tags=None):
         """Raise error if data has incorrect format."""
-        if not isinstance(ts, np.ndarray) or not len(ts.shape) == 2:
-            raise ValueError('ts should have shape (n_steps, n_variables).')
+        if not isinstance(data, np.ndarray) or not len(data.shape) == 3:
+            raise ValueError('data shape != (n_steps, n_vars, n_series).')
 
-        if np.isnan(ts).any():
-            raise ValueError('ts should not contain NaNs.')
+        # Check if data has any NaNs.
+        if np.isnan(data).any():
+            raise ValueError('data should not contain NaNs.')
+
+        # Check if data is long enough for forecasting horizon.
+        if len(data) <= self.horizon:
+            raise ValueError('Time series must be longer than horizon.')
+
+        # Make sure tags has the right format.
+        if tags and not isinstance(tags, dict):
+            raise ValueError('tags need to be a dictionary')
 
     def _check_is_fitted(self):
         """Raise error if model has not been fitted to data."""
@@ -205,112 +338,3 @@ class Forecaster():
         """Raise error if model data was not standardized."""
         if not self._is_standardized:
             raise ValueError('The data has not been standardized.')
-
-
-# Review: simplify the code by having just one Forecaster class. The network topology can be passed in as an argument.
-# We can have a few pre-defined networks such as RNN, CNN, LSTNet, etc.from
-# Example command-line usage would be:
-#   python deep4cast.py --data-path data.csv --network rnn ...
-class CNNForecaster(Forecaster):
-    """Implementation of Forecaster as temporal CNN.
-
-    :param topology: Neural network topology.
-    :type topology: list
-    :param **kwargs: Hyperparameters(e.g., learning_rate, momentum, etc.).
-    :type **kwargs: dict
-
-    """
-
-    def __init__(self, topology, **kwargs):
-        """Initialize properties."""
-        self.model_class = SharedLayerModel
-        self.batch_size = 10
-        self.epochs = 10
-        self.learning_rate = 0.1
-        self.momentum = 0.9
-        self.decay = 0.1
-        self.nesterov = False
-        self.uncertainty = None
-        self.dropout_rate = 0.1
-        allowed_args = (
-            'batch_size',
-            'epochs',
-            'learning_rate',
-            'momentum',
-            'decay',
-            'nesterov',
-            'uncertainty',
-            'dropout_rate'
-        )
-        for arg, value in kwargs.items():
-            if arg in allowed_args:
-                setattr(self, arg, value)
-            else:
-                raise ValueError('Invalid keyword argument: {}.'.format(arg))
-
-        self.optimizer = SGD(
-            lr=self.learning_rate,
-            momentum=self.momentum,
-            decay=self.decay,
-            nesterov=self.nesterov
-        )
-
-        super().__init__(
-            self.model_class,
-            self.optimizer,
-            topology,
-            self.batch_size,
-            self.epochs,
-            self.uncertainty,
-            self.dropout_rate
-        )
-
-
-class RNNForecaster(Forecaster):
-    """Implementation of Forecaster as truncated RNN.
-
-    :param topology: Neural network topology.
-    :type topology: dict
-    :param **kwargs: Hyperparameters(e.g., learning_rate, momentum, etc.).
-    :type **kwargs: dict
-
-    """
-
-    def __init__(self, topology, **kwargs):
-        """Initialize properties."""
-        self.model_class = SharedLayerModel
-        self.batch_size = 10
-        self.epochs = 10
-        self.learning_rate = 0.01
-        self.uncertainty = None
-        self.dropout_rate = 0.1
-        allowed_args = (
-            'batch_size',
-            'epochs',
-            'learning_rate',
-            'uncertainty',
-            'dropout_rate'
-        )
-        for arg, value in kwargs.items():
-            if arg in allowed_args:
-                setattr(self, arg, value)
-            else:
-                raise ValueError('Invalid keyword argument: {}.'.format(arg))
-
-        self.optimizer = RMSprop(
-            lr=self.learning_rate,
-        )
-
-        super().__init__(
-            self.model_class,
-            self.optimizer,
-            topology,
-            self.batch_size,
-            self.epochs,
-            self.uncertainty,
-            self.dropout_rate
-        )
-
-
-if __name__ == '__main__':
-    pass
