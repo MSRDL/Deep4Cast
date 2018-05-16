@@ -14,8 +14,8 @@ class TemporalCrossValidator():
     This class performs temporal (causal) cross-validaton similar to the
     approch in  https://robjhyndman.com/papers/cv-wp.pdf.
 
-    :param model: Forecaster.
-    :type model: A forecaster class
+    :param forecaster: Forecaster.
+    :type forecaster: A forecaster class
     :param data: Data set to used for cross-validation.
     :type data: numpy array
     :param train_frac: Fraction of data to be used for training per fold.
@@ -27,9 +27,14 @@ class TemporalCrossValidator():
 
     """
 
-    def __init__(self, model, data, train_frac=0.5, n_folds=5, loss='mse'):
+    def __init__(self,
+                 forecaster,
+                 data,
+                 train_frac=0.5,
+                 n_folds=5,
+                 loss='mse'):
         """Initialize properties."""
-        self.model = model
+        self.forecaster = forecaster
         self.data = data
         self.train_frac = train_frac
         self.n_folds = n_folds
@@ -54,21 +59,26 @@ class TemporalCrossValidator():
         # Instantiate the appropriate loss metric and get the folds for
         # evaluating the forecaster. We want to use a generator here to save
         # some space.
-        loss = getattr(metrics, self.loss)
-        folds = self._generate_folds(params['lookback'])
+        folds = self._generate_folds(params['lag'])
 
         train_losses, test_losses = [], []
         for i, (data_train, data_test) in enumerate(folds):
-            # Quietly fit the model
-            model = self.model(**params)
-            model.fit(data_train, verbose=0)
+            # Quietly fit the forecaster
+            forecaster = self.forecaster(**params)
+            forecaster.fit(data_train, verbose=0)
 
-            # Calculate model performance
-            train_predictions = model.predict(data_train)
-            test_predictions = model.predict(data_test)
+            # Calculate forecaster performance
+            train_predictions = forecaster.predict(data_train)['mean']
+            test_predictions = forecaster.predict(data_test)['mean']
 
-            train_actuals = data_train[params['lookback']:]
-            test_actuals = data_test[params['lookback']:]
+            train_actuals = data_train[params['lag']:]
+            test_actuals = data_test[params['lag']:]
+
+            # Make sure the loss function knows about the multi-step
+            # forecasting procedure.
+            loss = getattr(metrics, self.loss)
+            if forecaster.horizon > 1:
+                loss = metrics.adjust_for_horizon(loss)
 
             train_loss = round(loss(train_predictions, train_actuals), 2)
             test_loss = round(loss(test_predictions, test_actuals), 2)
@@ -104,18 +114,18 @@ class TemporalCrossValidator():
 
         return scores
 
-    def _generate_folds(self, lookback):
+    def _generate_folds(self, lag):
         """Yield a the data folds."""
         train_length = int(len(self.data) * self.train_frac)
         fold_length = (len(self.data) - train_length) // self.n_folds
 
         # Loopp over number of folds to generate folds for cross-validation
         # but make sure that the train and test part of the time series
-        # dataset overlap appropriately to account for the lookback window.
+        # dataset overlap appropriately to account for the lag window.
         for i in range(self.n_folds):
             a = i * fold_length
             b = (i + 1) * fold_length
-            lb = lookback
+            lb = lag
             data_train = self.data[a:train_length + a]
             data_test = self.data[train_length + a - lb:train_length + b]
 
