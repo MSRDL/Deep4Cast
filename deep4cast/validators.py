@@ -6,13 +6,16 @@ evaluate forecasting performance.
 
 """
 import numpy as np
+
 from . import metrics
+from .forecasters import Forecaster
 
 
 class TemporalCrossValidator():
     """Temporal cross-validator class.
-    This class performs temporal (causal) cross-validaton similar to the
-    approch in  https://robjhyndman.com/papers/cv-wp.pdf.
+
+    This class performs temporal (causal) cross-validation similar to the
+    approach in  https://robjhyndman.com/papers/cv-wp.pdf.
 
     :param forecaster: Forecaster.
     :type forecaster: A forecaster class
@@ -28,7 +31,7 @@ class TemporalCrossValidator():
     """
 
     def __init__(self,
-                 forecaster,
+                 forecaster: Forecaster,
                  data,
                  train_frac=0.5,
                  n_folds=5,
