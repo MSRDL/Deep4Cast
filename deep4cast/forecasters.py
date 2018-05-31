@@ -200,7 +200,9 @@ class Forecaster():
         if not self.uncertainty:
             # Return only mean prediction based on one sample when Uncertainty
             # is False
-            print("Uncertainty is set to False. Only mean prediction is generated. If confidence intervals are desired, please set 'uncertainty' to True when initializing the Forecaster")
+            print("Uncertainty is set to False. Only mean prediction is"
+                "generated. If confidence intervals are desired, please set"
+                "'uncertainty' to True when initializing the Forecaster")
             return {'mean': mean_prediction}
         else:
             # Turn samples into quantiles for easier display later.
