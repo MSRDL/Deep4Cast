@@ -4,8 +4,7 @@ custom data sets.
 
 Example:
     $python deep4cast.py --data-path "./tutorials/timeseries_data.csv"
-    # --lag 20 --test-fraction 0.1
-
+    # --lag 20 --test-fraction 0.1 -nt cnn
 """
 import argparse
 
