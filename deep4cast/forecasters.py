@@ -159,7 +159,6 @@ class Forecaster():
         X = self._sequentialize(data_standardized)[0]  # Only get inputs
 
         # If uncertainty is False, only do one sample prediction
-        # on self.uncertainty.
         if not self.uncertainty:
             n_samples = 1
 
