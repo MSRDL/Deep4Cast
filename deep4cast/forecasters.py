@@ -194,29 +194,19 @@ class Forecaster():
 
         samples = np.array(samples)
         
-        # Calculate mean prediction based on samples.
+        # Calculate mean prediction.
         mean_prediction = np.mean(samples, axis=0)
         
-        if not self.uncertainty:
-            # Return only mean prediction based on one sample when Uncertainty
-            # is False
-            print("Uncertainty is set to False. Only mean prediction is"
-                "generated. If confidence intervals are desired, please set"
-                "'uncertainty' to True when initializing the Forecaster")
-            return {'mean': mean_prediction}
-        else:
-            # Turn samples into quantiles for easier display later.
-            lower_quantile = np.nanpercentile(samples, quantiles[0], axis=0)
-            upper_quantile = np.nanpercentile(samples, quantiles[1], axis=0)
-            median_prediction = np.nanpercentile(samples, 50, axis=0)
-            
-            # Return mean, median, quantiles and samples when Uncertainty
-            # is True
-            return {'mean': mean_prediction,
-                    'median': median_prediction,
-                    'lower_quantile': lower_quantile,
-                    'upper_quantile': upper_quantile,
-                    'samples': samples}
+        # Turn samples into quantiles for easier display later.
+        lower_quantile = np.nanpercentile(samples, quantiles[0], axis=0) if self.uncertainty else None
+        upper_quantile = np.nanpercentile(samples, quantiles[1], axis=0) if self.uncertainty else None
+        median_prediction = np.nanpercentile(samples, 50, axis=0) if self.uncertainty else None
+        
+        return {'mean': mean_prediction,
+                'median': median_prediction,
+                'lower_quantile': lower_quantile,
+                'upper_quantile': upper_quantile,
+                'samples': samples}
 
     @property
     def optimizer(self):
