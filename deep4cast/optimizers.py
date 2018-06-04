@@ -7,13 +7,15 @@ a nearly optimial set of hyperparamters for a given forecaster class.
 """
 
 from functools import partial
-from hyperopt import hp, fmin, tpe, space_eval, Trials
 from inspect import getargspec
+
+from hyperopt import hp, fmin, tpe, Trials, STATUS_OK
+from .forecasters import Forecaster
 from .validators import TemporalCrossValidator
 
 # Set the optimizable arguments globally and assign a hyperopt probability
 # distribution to each of them.
-__ALLOWED_TOPOLOGY_ARGS = {
+_ALLOWED_TOPOLOGY_ARGS = {
     'activation': hp.choice,
     'use_bias': hp.choice,
     'activity_regularizer': hp.choice,
@@ -50,7 +52,7 @@ __ALLOWED_TOPOLOGY_ARGS = {
     'stddev': hp.loguniform
 }
 
-__ALLOWED_OPTIMIZER_ARGS = {
+_ALLOWED_OPTIMIZER_ARGS = {
     'lr': hp.loguniform,
     'momentum': hp.loguniform,
     'decay': hp.loguniform,
@@ -63,10 +65,10 @@ __ALLOWED_OPTIMIZER_ARGS = {
     'schedule_decay': hp.loguniform
 }
 
-__ALLOWED_FORECASTER_ARGS = {
-    'lookback': partial(hp.quniform, q=1.0),
+_ALLOWED_FORECASTER_ARGS = {
+    'lag': partial(hp.quniform, q=1.0),
     'batch_size': partial(hp.quniform, q=1.0),
-    'nepochs': partial(hp.quniform, q=1.0),
+    'epochs': partial(hp.quniform, q=1.0),
 }
 
 
@@ -78,21 +80,26 @@ class HyperOptimizer():
     :type forecaster: Forecaster instance
     :param domain: Parameter domain to explore by optimizer.
     :type domain: dict
-    :param niter: Optimization budget in number of iterations.
-    :type niter: int
+    :param n_iter: Optimization budget in number of iterations.
+    :type n_iter: int
 
     """
 
-    def __init__(self, data, forecaster, domain, niter=10, **kwargs):
+    def __init__(self,
+                 forecaster: Forecaster,
+                 data,
+                 domain,
+                 n_iter=10,
+                 **kwargs):
         """Initialize properties."""
         self.data = data
         self.forecaster = forecaster
         self.domain = domain
-        self.niter = niter
+        self.n_iter = n_iter
         self.train_frac = 0.7
-        self.nfolds = 3
-        self.loss = 'mse'
-        allowed_args = ('train_frac', 'nfolds', 'loss')
+        self.n_folds = 3
+        self.loss = 'mape'
+        allowed_args = ('train_frac', 'n_folds', 'loss')
         for arg, value in kwargs.items():
             if arg in allowed_args:
                 setattr(self, arg, value)
@@ -102,40 +109,52 @@ class HyperOptimizer():
 
     def fit(self):
         """Fit the model hyperparameters to the data."""
-        objective = self._create_objective
+        objective = self._create_objective()
         space = self._create_hyperparameter_domain()
 
-        # Useing the Trials object allows us to keep track of every trial.
-        trials = hp.Trials()
-        best_parameters = hp.fmin(
+        # Using the Trials object allows us to keep track of every trial.
+        trials = Trials()
+        best_parameters = fmin(
             fn=objective,
             space=space,
-            algo=self.algorithm,
+            algo=tpe.suggest,
             trials=trials,
-            max_evals=self.niter
+            max_evals=self.n_iter
         )
 
         return best_parameters, trials
 
     def _create_objective(self):
         """Return the objective function to be optimized."""
-        
-        def objective(**kwargs):
-            """Objective function closure to be optimized by 
+
+        def objective(x):
+            """Objective function closure to be optimized by
             hyperparameter optimization framework.
             """
 
             #
-            optimizer_params = getargspec(self.forecaster.optimizer)
-            topology_params = self.get_topol_params(self.forecaster.topology)
-            forecaster_params = ('lookback', 'batch_size', 'nepochs')
+            optimizer_params = getargspec(
+                self.forecaster._optimizer.__class__
+            )[0]
+            topology_params = self._get_topol_params(self.forecaster.topology)
+            forecaster_params = [
+                'lag',
+                'horizon',
+                'batch_size',
+                'epochs',
+                'dropout_rate'
+            ]
 
             #
-            for key, value in kwargs.items():
+            for key, value in x.items():
                 if key in optimizer_params:
-                    setattr(self.forecaster.optimizer, key, value)
+                    setattr(self.forecaster._optimizer, key, value)
                 elif key in topology_params:
-                    setattr(self.forecaster.topology, key, value)
+                    self._set_topol_param(
+                        self.forecaster.topology,
+                        key,
+                        value
+                    )
                 elif key in forecaster_params:
                     setattr(self.forecaster, key, value)
                 else:
@@ -146,42 +165,48 @@ class HyperOptimizer():
             # Use the validator attribute to generate a score for
             # a set of input parameters.
             validator = self.validator(
-                self.data,
                 self.forecaster,
+                self.data,
                 self.train_frac,
-                self.nfolds,
+                self.n_folds,
                 self.loss
             )
-            score = validator.evaluate(verbose=False)
+            scores = validator.evaluate(verbose=False)
+            scores['status'] = STATUS_OK
 
-            return score
+            return scores
 
         return objective
 
     def _create_hyperparameter_domain(self):
         """Return the hyper-parameter domain needed for hyperopt package."""
-        parameter_domain = []
+        parameter_domain = {}
 
         # Find optimizable parameters of forecaster topology from
         # forecaster attribute.
-        optimizer_params = getargspec(self.forecaster.optimizer)
-        topology_params = self.get_topol_params(self.forecaster.topology)
-        forecaster_params = ('lookback', 'batch_size', 'nepochs')
+        print(self.forecaster._optimizer)
+        optimizer_params = getargspec(self.forecaster._optimizer.__class__)[0]
+        topology_params = self._get_topol_params(self.forecaster.topology)
+        forecaster_params = [
+            'lag',
+            'horizon',
+            'batch_size',
+            'epochs',
+            'dropout_rate'
+        ]
 
         # Generate hyper-optmizer parameter_domain for optimizer parameters
         # but make sure that parameters are ordered and are allowed to
         # be optimized.
-        for key, value in self.domain['optimizer']:
+        for key, value in self.domain['optimizer'].items():
             low, high = value
             if low > high:
                 raise ValueError('Parameter range must be [low, high].')
-            if key in optimizer_params and key in __ALLOWED_OPTIMIZER_ARGS:
-                parameter_domain.append(
-                    __ALLOWED_OPTIMIZER_ARGS[key](
-                        label=key,
-                        low=low,
-                        high=high
-                    )
+            if key in optimizer_params and key in _ALLOWED_OPTIMIZER_ARGS:
+                parameter_domain[key] = _ALLOWED_OPTIMIZER_ARGS[key](
+                    label=key,
+                    low=low,
+                    high=high
                 )
             else:
                 raise ValueError('{} not an optimizer parameter.'.format(key))
@@ -190,39 +215,36 @@ class HyperOptimizer():
         # parameters. For the topology object, more logic is required to
         # distringuish different layers and to separate out the layer
         # activations.
-        for key, value in self.domain['topology']:
-            param = '_'.join(key.split()[1:])
+        for key, value in self.domain['topology'].items():
+            param = '_'.join(key.split('_')[1:])
             low, high = value
             if low > high:
                 raise ValueError('Parameter range must be [low, high].')
-            if param in topology_params and param in __ALLOWED_TOPOLOGY_ARGS:
+            if key in topology_params and param in _ALLOWED_TOPOLOGY_ARGS:
                 # Activation functions are handled the same for all layers
                 if param == 'activation':
                     label = param
                 else:
                     label = key
-                parameter_domain.append(
-                    __ALLOWED_TOPOLOGY_ARGS[param](
-                        label=label,
-                        low=low,
-                        high=high
-                    )
+                parameter_domain[key] = _ALLOWED_TOPOLOGY_ARGS[param](
+                    label=label,
+                    low=low,
+                    high=high
                 )
             else:
                 raise ValueError('{} not a topology parameter.'.format(param))
 
-        # Same as above. Generate hyper-optmizer parameter_domain for topology
-        # parameters.        for key, value in self.domain['forecaster']:
+        # Same as above. Generate hyper-optmizer parameter_domain for
+        # forecaster parameters.
+        for key, value in self.domain['forecaster'].items():
             low, high = value
             if low > high:
                 raise ValueError('Parameter range must be [low, high].')
-            if key in forecaster_params and key in __ALLOWED_FORECASTER_ARGS:
-                parameter_domain.append(
-                    __ALLOWED_FORECASTER_ARGS[key](
-                        label=key,
-                        low=low,
-                        high=high
-                    )
+            if key in forecaster_params and key in _ALLOWED_FORECASTER_ARGS:
+                parameter_domain[key] = _ALLOWED_FORECASTER_ARGS[key](
+                    label=key,
+                    low=low,
+                    high=high
                 )
             else:
                 raise ValueError('{} not a forecaster parameter.'.format(key))
@@ -240,13 +262,12 @@ class HyperOptimizer():
         """
         params = set()
         for layer in topology:
-            layer_id = layer['id']
+            layer_id = layer['meta']['layer_id']
             for key, value in layer['params'].items():
-                if value is None:
-                    if key is not 'activation':
-                        params.add(layer_id + '_' + key)
-                    else:
-                        params.add(key)
+                if key is not 'activation':
+                    params.add(layer_id + '_' + key)
+                else:
+                    params.add(key)
         params = list(params)
 
         return params
@@ -254,11 +275,11 @@ class HyperOptimizer():
     @staticmethod
     def _set_topol_param(topology, param, value):
         """Set topology parameters IN PLACE (!)."""
-        if param in __ALLOWED_TOPOLOGY_ARGS.keys():
+        if param in _ALLOWED_TOPOLOGY_ARGS.keys():
             layer_id = param.split()[0]
             layer_param = '_'.join(param.split()[1:])
             for i, layer in enumerate(topology):
-                if layer_id == layer['id']:
+                if layer_id == layer['meta']['layer_id']:
                     layer_ind = i
                     break
             else:

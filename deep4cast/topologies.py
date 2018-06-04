@@ -84,17 +84,6 @@ _RNN = [
         },
         'params': {
             'units': 128,
-            'return_sequences': True
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'GRU',
-            'layer_id': 'g2',
-            'parent_ids': ['g1']
-        },
-        'params': {
-            'units': 128,
             'return_sequences': False
         }
     }

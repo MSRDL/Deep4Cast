@@ -10,7 +10,7 @@ def adjust_for_horizon(metric):
     @wraps(metric)
     def adjusted_metric(data, data_truth):
         # Check if the data has a second dimension (that we interpret as the
-        # dimension for multiple steps ahead when doing predicitons).
+        # dimension for multiple steps ahead when doing predictions).
         if len(data.shape) == 4:
             data_truth_adjusted = []
             n = len(data_truth)  # number of time steps in the data
