@@ -63,8 +63,8 @@ class Forecaster():
         self.history = None
         self.loss = 'mse'
         self.metrics = ['mape']
-        self.seed = None
         self._tags = None
+        self.seed = None
 
         # Attributes related to input data (these are set during fitting)
         self._data_means = None
@@ -127,8 +127,8 @@ class Forecaster():
         self.history = self._model.fit(
             X,
             y,
-            batch_size=self.batch_size,
-            epochs=self.epochs,
+            batch_size=int(self.batch_size),
+            epochs=int(self.epochs),
             verbose=verbose
         )
 
@@ -200,6 +200,46 @@ class Forecaster():
                 'lower_quantile': lower_quantile,
                 'upper_quantile': upper_quantile,
                 'samples': samples}
+
+    @property
+    def horizon(self):
+        """Return the horizon."""
+        return self._horizon
+
+    @horizon.setter
+    def horizon(self, horizon):
+        """Instantiate the horizon."""
+        self._horizon = int(horizon)
+
+    @property
+    def lag(self):
+        """Return the lag."""
+        return self._lag
+
+    @lag.setter
+    def lag(self, lag):
+        """Instantiate the lag."""
+        self._lag = int(lag)
+
+    @property
+    def batch_size(self):
+        """Return the batch_size."""
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, batch_size):
+        """Instantiate the batch_size."""
+        self._batch_size = int(batch_size)
+
+    @property
+    def epochs(self):
+        """Return the epochs."""
+        return self._epochs
+
+    @epochs.setter
+    def epochs(self, epochs):
+        """Instantiate the epochs."""
+        self._epochs = int(epochs)
 
     @property
     def optimizer(self):
