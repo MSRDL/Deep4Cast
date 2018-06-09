@@ -9,7 +9,9 @@ a nearly optimial set of hyperparamters for a given forecaster class.
 from functools import partial
 from inspect import getargspec
 
-from hyperopt import hp, fmin, tpe, Trials, STATUS_OK
+import numpy as np
+
+from hyperopt import hp, fmin, tpe, Trials, STATUS_OK, STATUS_FAIL
 from .forecasters import Forecaster
 from .validators import TemporalCrossValidator
 
@@ -69,6 +71,7 @@ _ALLOWED_FORECASTER_ARGS = {
     'lag': partial(hp.quniform, q=1.0),
     'batch_size': partial(hp.quniform, q=1.0),
     'epochs': partial(hp.quniform, q=1.0),
+    'dropout_rate': hp.uniform
 }
 
 
@@ -172,7 +175,12 @@ class HyperOptimizer():
                 self.loss
             )
             scores = validator.evaluate(verbose=False)
-            scores['status'] = STATUS_OK
+
+            # Catch nan or inf predictions
+            if -np.inf < scores['loss'] < np.inf:
+                scores['status'] = STATUS_OK
+            else:
+                scores['status'] = STATUS_FAIL
 
             return scores
 
@@ -184,7 +192,6 @@ class HyperOptimizer():
 
         # Find optimizable parameters of forecaster topology from
         # forecaster attribute.
-        print(self.forecaster._optimizer)
         optimizer_params = getargspec(self.forecaster._optimizer.__class__)[0]
         topology_params = self._get_topol_params(self.forecaster.topology)
         forecaster_params = [

@@ -17,8 +17,11 @@ def synthetic_data():
 @pytest.fixture(scope='module')
 def sample_data():
     # Load the data from file
-    filename = '~/cdna/deep4cast/tests/timeseries_data.csv'
-    df = read_table(filename, sep=',')
+    filename = '/tests/timeseries_data.csv'
+    try:
+        df = read_table(filename, sep=',')
+    except:
+        print('Error: Run from tests from deep4cast folder.')
     ts = df.astype('float32').values
     ts = np.expand_dims(ts, axis=-1)
 
