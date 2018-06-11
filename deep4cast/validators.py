@@ -6,6 +6,7 @@ evaluate forecasting performance.
 
 """
 import numpy as np
+import time
 
 from . import metrics
 from .forecasters import Forecaster
@@ -43,15 +44,7 @@ class TemporalCrossValidator():
         self.n_folds = n_folds
         self.loss = loss
 
-    def __call__(self, params, verbose=False):
-        """Support functional API for this class to be able to interface
-        easility with hyperparameter optimizers.
-
-        """
-
-        return self.evaluate(params, verbose=verbose)
-
-    def evaluate(self, params, verbose=True):
+    def evaluate(self, verbose=True):
         """Evaluate forecaster with forecaster parameters params.
 
         :param params: Dictionary that contains parameters for forecaster.
@@ -62,20 +55,23 @@ class TemporalCrossValidator():
         # Instantiate the appropriate loss metric and get the folds for
         # evaluating the forecaster. We want to use a generator here to save
         # some space.
-        folds = self._generate_folds(params['lag'])
+        lag = self.forecaster.lag
+        folds = self._generate_folds(lag)
 
         train_losses, test_losses = [], []
         for i, (data_train, data_test) in enumerate(folds):
             # Quietly fit the forecaster
-            forecaster = self.forecaster(**params)
+            forecaster = self.forecaster
+            t0 = time.time()
             forecaster.fit(data_train, verbose=0)
+            duration = time.time() - t0
 
             # Calculate forecaster performance
             train_predictions = forecaster.predict(data_train)['mean']
             test_predictions = forecaster.predict(data_test)['mean']
 
-            train_actuals = data_train[params['lag']:]
-            test_actuals = data_test[params['lag']:]
+            train_actuals = data_train[lag:]
+            test_actuals = data_test[lag:]
 
             # Make sure the loss function knows about the multi-step
             # forecasting procedure.
@@ -105,14 +101,15 @@ class TemporalCrossValidator():
         # dictionary to denote the main quantity of interest, because
         # hyperopt expect a dictionary with a 'loss' key.
         scores = {
+            'train_loss': np.mean(train_losses),
+            'train_loss_std': np.std(train_losses),
+            'train_loss_min': np.min(train_losses),
+            'train_loss_max': np.max(train_losses),
             'loss': np.mean(test_losses),
             'loss_std': np.std(test_losses),
             'loss_min': np.min(test_losses),
             'loss_max': np.max(test_losses),
-            'train_loss': np.mean(train_losses),
-            'train_loss_std': np.std(train_losses),
-            'train_loss_min': np.min(train_losses),
-            'train_loss_max': np.max(train_losses)
+            'training_time': duration
         }
 
         return scores

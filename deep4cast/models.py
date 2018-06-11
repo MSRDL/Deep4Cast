@@ -12,7 +12,7 @@ import keras.layers
 import numpy as np
 from keras.models import Model
 
-from .layers import MCDropout
+from . import custom_layers
 
 
 class SharedLayerModel(Model):
@@ -71,9 +71,12 @@ class SharedLayerModel(Model):
             parent_ids = layer['meta']['parent_ids']
             params = layer['params']
 
-            # Construct Keras layer to be built from string 'meta' which is
+            # Construct layer to be built from string 'meta' which is
             # part of topology list.
-            layer_cls = getattr(keras.layers, layer_type)
+            try:
+                layer_cls = getattr(keras.layers, layer_type)
+            except AttributeError:
+                layer_cls = getattr(custom_layers, layer_type)
 
             # In order to get the accepteble arguments for each layer we need
             # to use inspect because of keras' legacy support decorators.
@@ -99,7 +102,9 @@ class SharedLayerModel(Model):
                     # Networks should be used, we add Dropout after each layer,
                     # even at test time.
                     dropout_id = next_id + '_' + layer_id + '_dropout'
-                    layers[dropout_id] = MCDropout(rate)(layers[next_id])
+                    layers[dropout_id] = custom_layers.MCDropout(rate)(
+                        layers[next_id]
+                    )
                     next_id = dropout_id
 
                 parents.append(layers[next_id])
@@ -116,7 +121,9 @@ class SharedLayerModel(Model):
         # forecasting.
         if self._uncertainty:
             dropout_id = layer_id + '_dense_dropout'
-            layers[dropout_id] = MCDropout(rate)(layers[layer_id])
+            layers[dropout_id] = custom_layers.MCDropout(rate)(
+                layers[layer_id]
+            )
             layer_id = dropout_id
 
         layer_cls = keras.layers.Dense
