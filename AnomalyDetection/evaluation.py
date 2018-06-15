@@ -111,21 +111,20 @@ def AP_score(anomalies, label, iou_threshold):
 
 
 def evaluate(data, labels, lag):
-	"""
-	:param data (type: panda series): input time series data
-	:param labels (type: panda series): input labels 1/0 for each point
-	:param lag (type: int): lag time
-	:return (type: float): mean average precision score over given intersection over union (IoU) thresholds 
-	"""
-	anomalies = detect_anomalies(data, lag, num_anomalies=len(data)/lag, visualize=False)
-
-	#Various IoU thresholds for calculating mean of average precision over each IoU threshold
-	iou_thresholds = [0.0, 0.1, 0.2, 0.3]
+    """
+    :param data (type: panda series): input time series data
+    :param labels (type: panda series): input labels 1/0 for each point
+    :param lag (type: int): lag time
+    :return (type: float): mean average precision score over given intersection over union (IoU) thresholds 
+    """
+    anomalies, _ = detect_anomalies(data, lag, num_anomalies=len(data)/lag, visualize=False)
+    #Various IoU thresholds for calculating mean of average precision over each IoU threshold
+    iou_thresholds = [0.0, 0.1, 0.2, 0.3]
     mean = 0
-    
     for i in range(len(iou_thresholds)):
         mean += AP_score(anomalies, labels, iou_thresholds[i])
-	return float(mean)/ len(iou_thresholds)
+    return float(mean)/ len(iou_thresholds)
+
 
 
 
