@@ -1,4 +1,3 @@
-## Anomaly Detection
+The anomaly detection has been moved to a new repository at https://github.com/msrdl/tsa
 
-- **[Demo](http://nbviewer.jupyter.org/github/MSRDL/Deep4Cast/blob/master/AnomalyDetection/demo.ipynb)**
-- **[Presentation: Streaming Least Squares Algorithm for Anomaly Detection](https://1drv.ms/p/s!Ar57GyE1TzYYh_UGeQ8ATUAytx52Fw)**
+(This file will be deleted in 6 months.)
