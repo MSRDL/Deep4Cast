@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """Time series forecasting module.
-
 This module provides access to forecasters that can be fit multivariate time
 series given as numpy arrays.
-
 """
 from inspect import getargspec
 
@@ -30,7 +28,6 @@ class Forecaster():
     :type uncertainty: boolean
     :param dropout_rate: Probability of dropping a node during Dropout.
     :type dropout_rate: float
-
     """
 
     def __init__(self,
@@ -63,7 +60,7 @@ class Forecaster():
         self.history = None
         self.loss = 'mse'
         self.metrics = ['mape']
-        self._tags = None
+        self.targets = None
         self.seed = None
 
         # Attributes related to input data (these are set during fitting)
@@ -72,19 +69,17 @@ class Forecaster():
 
         # Boolean checks
         self._is_fitted = False
-        self._is_standardized = False
+        self._is_normalized = False
 
-    def fit(self, data, tags=None, verbose=0):
+    def fit(self, data, targets=None, verbose=0):
         """Fit model to data.
-
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
-        :param tags: Dict that contains the indices of targets and covariates.
-        :type tags: dict
+        :param targets: Dict that contains the indices of targets and covariates.
+        :type targets: dict
         :param verbose: Verbosity mode. 0 = silent, 1 = progress bar,
             2 = one line per epoch.
         :type verbose: int
-
         """
         self._check_data_format(data)
 
@@ -95,17 +90,17 @@ class Forecaster():
 
         # Store a dictionary of lists that contain the indicies of
         # target variables, dynamic, and static covariates.
-        self._tags = tags
+        self.targets = targets
 
-        # When data format has been succesfully checked standardize it.
-        data_standardized = self._standardize(data)
-        data_standardized = data_standardized.astype('float32')
+        # When data format has been succesfully checked normalize it.
+        data_normalized = self._normalize(data)
+        data_normalized = self._convert_to_float32(data_normalized)
 
         # The model expects input-output data pairs, so we create them from
-        # the standardized time series arrary by windowing. Xs are 3D tensors
+        # the normalized time series arrary by windowing. Xs are 3D tensors
         # of shape number of steps * lag * dimensionality and
         # ys are 2D tensors of lag * dimensionality.
-        X, y = self._sequentialize(data_standardized)
+        X, y = self._sequentialize(data_normalized)
 
         # Set up the model based on internal model class.
         self._model = self.model_class(
@@ -138,25 +133,23 @@ class Forecaster():
 
     def predict(self, data, n_samples=100, quantiles=(5, 95)):
         """Generate predictions for input time series numpy array.
-
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
         :param n_samples: Number of prediction samples (>= 1).
         :type n_samples: int
         :param quantiles: Tuple of quantiles for credicble interval.
         :type quantiles: tuple
-
         """
-        n_series = data.shape[2]  # number of distinct time series to train on
+        n_series = data.shape[0]  # number of distinct time series to train on
 
         self._check_is_fitted()
-        self._check_is_standardized()
+        self._check_is_normalized()
         self._check_data_format(data)
 
         # Bring input into correct format for model train and prediction
-        data_standardized = self._standardize(data, locked=True)
-        data_standardized = data_standardized.astype('float32')
-        X = self._sequentialize(data_standardized)[0]  # Only get inputs
+        data_normalized = self._normalize(data, locked=True)
+        data_normalized = self._convert_to_float32(data_normalized)
+        X = self._sequentialize(data_normalized)[0]  # Only get inputs
 
         # If uncertainty is False, only do one sample prediction
         if not self.uncertainty:
@@ -189,7 +182,7 @@ class Forecaster():
                 prediction = np.swapaxes(prediction, 0, 3)
                 prediction = np.swapaxes(prediction, 1, 2)
 
-            samples.append(self._unstandardize(prediction))
+            samples.append(self._unnormalize(prediction, target=self.targets))
 
         samples = np.array(samples)
 
@@ -197,9 +190,12 @@ class Forecaster():
         mean_prediction = np.mean(samples, axis=0)
 
         # Turn samples into quantiles for easier display later.
-        lower_quantile = np.nanpercentile(samples, quantiles[0], axis=0) if self.uncertainty else None
-        upper_quantile = np.nanpercentile(samples, quantiles[1], axis=0) if self.uncertainty else None
-        median_prediction = np.nanpercentile(samples, 50, axis=0) if self.uncertainty else None
+        lower_quantile = np.nanpercentile(
+            samples, quantiles[0], axis=0) if self.uncertainty else None
+        upper_quantile = np.nanpercentile(
+            samples, quantiles[1], axis=0) if self.uncertainty else None
+        median_prediction = np.nanpercentile(
+            samples, 50, axis=0) if self.uncertainty else None
 
         return {'mean': mean_prediction,
                 'median': median_prediction,
@@ -274,34 +270,51 @@ class Forecaster():
         if isinstance(topology, list):
             return topology
 
+    @staticmethod
+    def _convert_to_float32(array):
+        out_array = np.copy(array)
+        for i, sub_array in enumerate(array):
+            out_array[i] = sub_array.astype('float32')
+        return out_array
+
     def _sequentialize(self, data):
         """Sequentialize time series array.
         Create two numpy arrays, one for the windowed input time series X
         and one for the corresponding output values that need to be
         predicted.
         """
-        n_time_steps = data.shape[0]
-        n_series = data.shape[2]  # number of distinct time series to train on
-        horizon = self.horizon  # Redefine variable to keep visual noise low
-        lag = self.lag  # Redefine variable to keep visual noise low
-        tags = self._tags
+        # Redefine variable to keep further visual noise low
+        horizon = self.horizon
+        lag = self.lag
+        target_inds = self.targets
 
         # Sequentialize the dataset, i.e., split it into shorter windowed
         # sequences.
         X, y = [], []
-        for i in range(n_series):
+        for i, time_series in enumerate(data):
+            # Making sure the time_series dataset is in correct numpy format
+            time_series = np.atleast_2d(time_series)
+            if time_series.shape[0] < time_series.shape[1]:
+                time_series = time_series.T
+
+            n_time_steps = time_series.shape[0]  # Number of time steps
+
+            # Restructure time series data into chunks according to window
+            # (lag) size and horizon
             for j in range(n_time_steps - lag):
                 if j + lag + horizon <= n_time_steps:
-                    X.append(data[j:j + lag, :, i])
+                    # Store features of this data point
+                    X.append(time_series[j:j + lag, :])
 
-                    # Target indices for forecasting
-                    target_inds = range(j + lag, j + lag + horizon)
-                    if tags:
-                        y.append(data[target_inds, tags['targets'], i])
+                    # Store target value of this data point
+                    forecast_inds = range(j + lag, j + lag + horizon)
+                    if target_inds:
+                        y.append(time_series[forecast_inds, :][:, target_inds])
                     else:
-                        y.append(np.squeeze(data[target_inds, :, i]))
+                        y.append(time_series[forecast_inds, :])
 
-        # Make sure to return numpy arrays not lists.
+        # We need to catch the cases where lags, horizons, and number of time
+        # steps are not compatible
         if not X or not y:
             raise ValueError(
                 'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
@@ -309,78 +322,64 @@ class Forecaster():
                     n_time_steps
                 )
             )
-        return np.array(X), np.array(y)
 
-    def _standardize(self, data, locked=False):
-        """Standardize numpy array in a NaN-friendly way.
+        # Make sure we output numpy arrays.
+        X = np.array(X)
+        y = np.array(y)
+        return X, y
 
+    def _normalize(self, data, locked=False):
+        """normalize numpy array.
         :param data: Input time series.
         :type data: numpy array
         :param data: Boolean that locks down the scales of the data.
         :type data: boolean
-
         """
-        # Use numpy.nanmean/nanstd to handle potential nans when
-        # when standardizing data. Make sure to keep a lock on
-        # internal variables during prediction step.
+
         if not locked:
-            # By default the data scale is set by the standard deviation,
-            # but we need to handle the case where the standard deviation
-            # or the mean is zero.
-            means = np.nanmean(data, axis=0)
-            scales = np.nanstd(data, axis=0)
+                # Need to normalize over time and independent time series
+            for i, time_series in enumerate(data):
+                if i == 0:
+                    stacked_data = np.vstack(time_series)
+                else:
+                    stacked_data = np.vstack((stacked_data, time_series))
 
-            # Check for small scales in stds.
-            ind = np.where(scales < 1e-16)
-            scales[ind] = means[ind]
-
-            # Check again for means.
-            ind = np.where(scales < 1e-16)
-            scales[ind] = 1.0
-
-            self._data_means = means
-            self._data_scales = scales
-            self._is_standardized = True
+            self._data_means = np.mean(stacked_data)
+            self._data_scales = np.std(stacked_data)
+            self._is_normalized = True
         else:
-            self._check_is_standardized()
+            self._check_is_normalized()
 
-        return (data - self._data_means) / self._data_scales
+        return (data - np.mean(stacked_data)) / np.std(stacked_data)
 
-    def _unstandardize(self, data):
-        """Un-standardize numpy array."""
-        self._check_is_standardized()
+    def _unnormalize(self, data, targets=None):
+        """Un-normalize numpy array."""
+        self._check_is_normalized()
 
-        # Unstandardize taking presence of covariates into account.
-        if self._tags:
-            means = self._data_means[self._tags['targets']]
-            scales = self._data_scales[self._tags['targets']]
+        # Unnormalize, taking presence of covariates into account.
+        if targets:
+            means = self._data_means[targets]
+            scales = self._data_scales[targets]
             return data * scales + means
         else:
             return data * self._data_scales + self._data_means
 
-    def _check_data_format(self, data, tags=None):
+    def _check_data_format(self, data):
         """Raise error if data has incorrect format."""
-        if not isinstance(data, np.ndarray) or not len(data.shape) == 3:
-            raise ValueError('data shape != (n_steps, n_vars, n_series).')
-
         # Check if data has any NaNs.
-        if np.isnan(data).any():
+        if np.isnan([np.isnan(x).any() for x in data]).any():
             raise ValueError('data should not contain NaNs.')
 
         # Check if data is long enough for forecasting horizon.
         if len(data) <= self.horizon:
             raise ValueError('Time series must be longer than horizon.')
 
-        # Make sure tags has the right format.
-        if tags and not isinstance(tags, dict):
-            raise ValueError('tags need to be a dictionary')
-
     def _check_is_fitted(self):
         """Raise error if model has not been fitted to data."""
         if not self._is_fitted:
             raise ValueError('The model has not been fitted.')
 
-    def _check_is_standardized(self):
-        """Raise error if model data was not standardized."""
-        if not self._is_standardized:
-            raise ValueError('The data has not been standardized.')
+    def _check_is_normalized(self):
+        """Raise error if model data was not normalized."""
+        if not self._is_normalized:
+            raise ValueError('The data has not been normalized.')
