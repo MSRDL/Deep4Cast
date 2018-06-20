@@ -17,7 +17,7 @@ def synthetic_data():
 @pytest.fixture(scope='module')
 def sample_data():
     # Load the data from file
-    filename = '/tests/timeseries_data.csv'
+    filename = './tests/timeseries_data.csv'
     try:
         df = read_table(filename, sep=',')
     except:
