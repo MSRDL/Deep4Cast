@@ -120,7 +120,7 @@ def mase(data, data_truth, insample, freq):
 
 
 def msis(data_upper, data_lower, data_truth, insample, freq, alpha = 0.05):
-    """Computes symmetric mean absolute percentage error (SMAPE)
+    """Computes Mean Scaled Interval Score (MSIS)
 
     :param data_upper: Predicted upper bound of time series values 
     :type data_upper: numpy array
@@ -147,7 +147,7 @@ def msis(data_upper, data_lower, data_truth, insample, freq, alpha = 0.05):
 
 
 def coverage(data_upper, data_lower, data_truth):
-    """Computes symmetric mean absolute percentage error (SMAPE)
+    """Computes coverage rate of the prediction interval.
 
     :param data_upper: Predicted upper bound of time series values 
     :type data_upper: numpy array
@@ -155,8 +155,6 @@ def coverage(data_upper, data_lower, data_truth):
     :type data_lower: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-    :param alpha: significance level (i.e. 95% confidence interval means alpha = 0.05) 
-    :type alpha: float
 
     """
 

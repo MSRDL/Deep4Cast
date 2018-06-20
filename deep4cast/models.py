@@ -41,7 +41,7 @@ class SharedLayerModel(Model):
                  output_shape,
                  topology,
                  uncertainty=False,
-                 concreteDropout = False,
+                 concreteDropout=False,
                  dropout_rate=0.1):
         """Initialize attributes."""
         self._input_shape = input_shape

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Custom layers module."""
 
-from keras.layers import Layer, Dropout, Dense , Lambda , Wrapper
+from keras.layers import Layer, Dropout, Dense, Lambda, Wrapper
 from keras import backend as K
 from keras.legacy import interfaces
 from keras import initializers
