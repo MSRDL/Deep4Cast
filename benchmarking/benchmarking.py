@@ -1,18 +1,15 @@
 import argparse
 import ast
+import os
 import re
-import threading
 import time
-
+import threading
 import numpy as np
 from pandas import read_table
-
 from deep4cast.forecasters import Forecaster
 from deep4cast.metrics import adjust_for_horizon, mape
-import  os
 
 mutex = threading.Lock()
-
 
 def load_topology(args):
     """
@@ -57,7 +54,8 @@ def build_datasets(ts, lookback_period, test_fraction):
 def run_model(args, data_file, test_fraction, lag, topologies, epochs, batch_size, separator, horizon, lr, optimizers,
               results):
     """
-    Runs the forecaster on a data set (with given parameters) and computes the prediction accuracy
+    Runs the forecaster on a data set (with given parameters) and computes the metric on train and test sets also
+    reports the training time
     :return:
     """
     global mutex
@@ -66,7 +64,8 @@ def run_model(args, data_file, test_fraction, lag, topologies, epochs, batch_siz
     train_set, test_set = build_datasets(df.values, lag, test_fraction)
 
     for i in range(0, len(topologies)):
-        print("Train\t\t model:" + topologies[i] + "\tdataset:" + data_file)
+        if args.verbose==1:
+            print("Train\t\t model:" + topologies[i] + "\tdataset:" + data_file)
         start = time.time()
         try:
             forecaster = Forecaster(
@@ -85,7 +84,8 @@ def run_model(args, data_file, test_fraction, lag, topologies, epochs, batch_siz
             forecaster.fit(train_set, verbose=args.verbose)
             train_time = time.time() - start
             metric = adjust_for_horizon(mape)
-            print("Predict\t\t model:" + topologies[i] + "\tdataset:" + data_file)
+            if args.verbose == 1:
+                print("Predict\t\t model:" + topologies[i] + "\tdataset:" + data_file)
             train_err = metric(forecaster.predict(train_set, n_samples=args.n_samples)['mean'],
                                train_set[lag:len(train_set)])
             test_err = metric(forecaster.predict(test_set, n_samples=args.n_samples)['mean'],
@@ -96,10 +96,11 @@ def run_model(args, data_file, test_fraction, lag, topologies, epochs, batch_siz
             train_err = 'NA'
             test_err = 'NA'
 
-        mutex.acquire()
         file_name = os.path.basename(data_file)
+        mutex.acquire()
         results.append((file_name, topologies[i], train_err, test_err, train_time))
         mutex.release()
+        print("Done running for data " + data_file + " ...")
 
     return train_err, test_err, train_time
 
@@ -123,8 +124,7 @@ def run_multi_threaded(args, test_fractions, lags, topologies, epochs, batch_siz
         if len(threads) < num_threads:
             threads.append(threading.Thread(target=run_model, args=(
                 args, args.data_files[i], test_fractions[i], lags[i], topologies, epochs[i], batch_sizes[i],
-                separators[i],
-                horizons[i], lrs[i], optimizers, results)))
+                separators[i],horizons[i], lrs[i], optimizers, results)))
         else:
             for i in range(0, len(threads)):
                 threads[i].start()
@@ -160,9 +160,7 @@ def fill_list(list, target_size):
 
 
 def main(args):
-    """
-    :param args:
-    """
+
     print("\n\nRunning the benchmarks ...")
     topologies = load_topology(args)
     if topologies is None:
@@ -184,13 +182,16 @@ def main(args):
         results = run_single_threaded(args, test_fractions, lags, topologies, epochs, batch_sizes, separators, horizons,
                                       lrs, optimizers)
 
-    print("#" * 100)
-    print("Model\t\t\t\tTrain Metric\t\t\t\tTest Metric\t\t\t\tTrain Time\t\t\t\tDataset")
-    print("#" * 100)
-    for i in range(0, len(results)):
-        print(results[i][1] + '\t\t\t' + str(results[i][2]) + '\t\t\t' + str(results[i][3]) + '\t\t\t' + str(
-            results[i][4]) + '\t\t\t' + str(results[i][0]))
-    print("#" * 100)
+
+    if args.print_results:
+        print("#" * 100)
+        print("Model\t\t\t\tTrain Metric\t\t\t\tTest Metric\t\t\t\tTrain Time\t\t\t\tDataset")
+        print("#" * 100)
+        for i in range(0, len(results)):
+            print(results[i][1] + '\t\t\t' + str(results[i][2]) + '\t\t\t' + str(results[i][3]) + '\t\t\t' + str(
+                results[i][4]) + '\t\t\t' + str(results[i][0]))
+        print("#" * 100)
+    return results
 
 
 def _get_parser():
@@ -300,6 +301,12 @@ def _get_parser():
                             help="Number of threads to parallelize the computation",
                             required=False,
                             default=3,
+                            type=int)
+
+    named_args.add_argument('-p', '--print_results',
+                            help="Print results in tabular form",
+                            required=False,
+                            default=0,
                             type=int)
 
     named_args.add_argument('-v', '--verbose',
