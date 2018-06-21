@@ -16,7 +16,7 @@ def adjust_for_horizon(metric):
             n = len(data_truth)  # number of time steps in the data
             horizon = data.shape[1]  # extract the length for horizon.
             for i in range(horizon):
-                data_truth_adjusted.append(data_truth[i:n-horizon+i+1])
+                data_truth_adjusted.append(data_truth[i:n - horizon + i + 1])
             data_truth_adjusted = np.array(data_truth_adjusted)
             data_truth_adjusted = np.swapaxes(data_truth_adjusted, 0, 1)
         else:
@@ -36,7 +36,6 @@ def mae(data, data_truth):
     :type data_truth: numpy array
 
     """
-
 
     return np.mean(np.abs(data - data_truth))
 
@@ -119,7 +118,7 @@ def mase(data, data_truth, insample, freq):
     return np.mean(np.abs(data - data_truth)) / normalization * 100.0
 
 
-def msis(data_upper, data_lower, data_truth, insample, freq, alpha = 0.05):
+def msis(data_upper, data_lower, data_truth, insample, freq, alpha=0.05):
     """Computes Mean Scaled Interval Score (MSIS)
 
     :param data_upper: Predicted upper bound of time series values 
@@ -139,10 +138,15 @@ def msis(data_upper, data_lower, data_truth, insample, freq, alpha = 0.05):
 
     eps = 1e-16  # Need to make sure that denominator is not zero
     normalization = np.mean(np.abs(insample[freq:] - insample[:-freq])) + eps
-    mean_interval_score = np.mean((data_upper - data_lower) \
-                                   + 2.0/alpha*(data_lower - data_truth)*(data_truth < data_lower) \
-                                   + 2.0/alpha*(data_truth - data_upper)*(data_truth > data_upper))
-    
+    mean_interval_score = np.mean((data_upper - data_lower)
+                                  + 2.0 / alpha *
+                                  (data_lower - data_truth) *
+                                  (data_truth < data_lower)
+                                  + 2.0 / alpha *
+                                  (data_truth - data_upper) *
+                                  (data_truth > data_upper)
+                                  )
+
     return mean_interval_score / normalization * 100.0
 
 
@@ -158,7 +162,7 @@ def coverage(data_upper, data_lower, data_truth):
 
     """
 
-    coverage_percentage = np.mean(1.0*(data_truth > data_lower)*(data_truth < data_upper))
-    
-    return coverage_percentage * 100.0
+    coverage_percentage = np.mean(
+        1.0 * (data_truth > data_lower) * (data_truth < data_upper))
 
+    return coverage_percentage * 100.0
