@@ -28,8 +28,6 @@ class SharedLayerModel(Model):
     :type output_shape: tuple
     :param topology: Neural network topology.
     :type topology: list
-    :param uncertainty: True if applying MC Dropout after every layer.
-    :type uncertainty: boolean
     :param dropout_rate:  Fraction of the units to drop for the linear
         transformation of the inputs. Float between 0 and 1.
     :type dropout_rate: float
@@ -40,14 +38,12 @@ class SharedLayerModel(Model):
                  input_shape,
                  output_shape,
                  topology,
-                 uncertainty=False,
-                 dropout_rate=0.1):
+                 dropout_rate=None):
         """Initialize attributes."""
         self._input_shape = input_shape
         self._output_shape = output_shape
         self._topology = topology
         self._rnd_init = 'glorot_normal'
-        self._uncertainty = uncertainty
         self._dropout_rate = dropout_rate
 
         # Initialize super class with custom layers
@@ -97,7 +93,7 @@ class SharedLayerModel(Model):
             for parent_id in parent_ids:
                 next_id = parent_id
 
-                if self._uncertainty:
+                if rate:
                     # If MC Dropout, aka the Bayesian approximation to Neural
                     # Networks should be used, we add Dropout after each layer,
                     # even at test time.
@@ -119,7 +115,7 @@ class SharedLayerModel(Model):
 
         # Need to handle the output layer and reshaping for multi-step
         # forecasting.
-        if self._uncertainty:
+        if rate:
             dropout_id = layer_id + '_dense_dropout'
             layers[dropout_id] = custom_layers.MCDropout(rate)(
                 layers[layer_id]

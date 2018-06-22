@@ -7,7 +7,9 @@ from inspect import getargspec
 
 import numpy as np
 import keras.optimizers
+from keras.callbacks import EarlyStopping
 
+from . import custom_losses
 from .models import SharedLayerModel
 from .topologies import get_topology
 
@@ -24,28 +26,26 @@ class Forecaster():
     :type batch_size: int
     :param epochs: Number of training epochs.
     :type epochs: int
-    :param uncertainty: True if applying MC Dropout after every layer.
-    :type uncertainty: boolean
     :param dropout_rate: Probability of dropping a node during Dropout.
     :type dropout_rate: float
     """
 
     def __init__(self,
                  topology,
-                 optimizer: str,
-                 lag: int,
+                 lookback: int,
                  horizon: int,
-                 batch_size: int,
-                 epochs: int,
-                 uncertainty=False,
-                 dropout_rate=0.1,
+                 loss='mse',
+                 optimizer='sgd',
+                 batch_size=16,
+                 max_epochs=1000,
+                 dropout_rate=None,
+                 seed=None,
                  **kwargs):
         """Initialize properties."""
 
         # Attributes related to neural network model
         self.model_class = SharedLayerModel
         self.topology = self._build_topology(topology)
-        self.uncertainty = uncertainty
         self.dropout_rate = dropout_rate
         self._model = None
 
@@ -53,15 +53,15 @@ class Forecaster():
         self.optimizer = optimizer
         self.set_optimizer_args(kwargs)
 
-        self.lag = lag
+        self.lookback = lookback
         self.horizon = horizon
         self.batch_size = batch_size
-        self.epochs = epochs
+        self.max_epochs = max_epochs
+        self.loss = loss
+        self.seed = seed
         self.history = None
-        self.loss = 'mse'
-        self.metrics = ['mape']
+        self._loss = None
         self.targets = None
-        self.seed = None
 
         # Attributes related to input data (these are set during fitting)
         self._data_means = None
@@ -71,12 +71,17 @@ class Forecaster():
         self._is_fitted = False
         self._is_normalized = False
 
-    def fit(self, data, targets=None, verbose=0):
+    def fit(self, data, targets=None, val_frac=0.1, patience=5, verbose=0):
         """Fit model to data.
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
-        :param targets: Dict that contains the indices of targets and covariates.
+        :param targets: Dict that contains the indices of targets and
+        covariates.
         :type targets: dict
+        :param val_frac: Fraction of data points to set aside for validation.
+        :type val_frac: float
+        :param patience: number of epochs to wait before early stopping,
+        :type patience: float
         :param verbose: Verbosity mode. 0 = silent, 1 = progress bar,
             2 = one line per epoch.
         :type verbose: int
@@ -98,32 +103,50 @@ class Forecaster():
 
         # The model expects input-output data pairs, so we create them from
         # the normalized time series arrary by windowing. Xs are 3D tensors
-        # of shape number of steps * lag * dimensionality and
-        # ys are 2D tensors of lag * dimensionality.
+        # of shape number of steps * lookback * dimensionality and
+        # ys are 2D tensors of lookback * dimensionality.
         X, y = self._sequentialize(data_normalized)
+        X = X[~np.isnan(y)[:, 0, 0]]
+        y = y[~np.isnan(y)[:, 0, 0]]
+
+        # Split into training and validation
+        n_val = int(len(X) * val_frac)
+        X_train = X[:-n_val]
+        y_train = y[:-n_val]
+        X_val = X[-n_val:]
+        y_val = y[-n_val:]
+
+        # Prepare model output shape based on loss function
+        # This is to handle loss functions that required multiple parameters
+        self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
+        loss_dim_factor = self._loss.dim_factor
+        output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
 
         # Set up the model based on internal model class.
         self._model = self.model_class(
             input_shape=X.shape[1:],
-            output_shape=y.shape[1:],
+            output_shape=output_shape,
             topology=self.topology,
-            uncertainty=self.uncertainty,
             dropout_rate=self.dropout_rate
         )
 
-        # Keras needs to compile the comuptational graph before fitting.
+        # Keras needs to compile the computational graph before fitting.
         self._model.compile(
-            loss=self.loss,
-            optimizer=self._optimizer,
-            metrics=self.metrics
+            loss=self._loss,
+            optimizer=self._optimizer
         )
+
+        # Set up early stopping callback
+        es = EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)
 
         # Print the model topology and parameters before fitting.
         self.history = self._model.fit(
-            X,
-            y,
+            X_train,
+            y_train,
             batch_size=int(self.batch_size),
-            epochs=int(self.epochs),
+            epochs=int(self.max_epochs),
+            validation_data=(X_val, y_val),
+            callbacks=[es],
             verbose=verbose
         )
 
@@ -140,68 +163,173 @@ class Forecaster():
         :param quantiles: Tuple of quantiles for credicble interval.
         :type quantiles: tuple
         """
-        n_series = data.shape[0]  # number of distinct time series to train on
+        data_pred = []
+        for time_series in data:
+            data_pred.append(time_series[-self.lookback:, :])
+        data_pred = np.array(data_pred)
 
         self._check_is_fitted()
         self._check_is_normalized()
         self._check_data_format(data)
 
         # Bring input into correct format for model train and prediction
-        data_normalized = self._normalize(data, locked=True)
+        data_normalized = self._normalize(data_pred, locked=True)
         data_normalized = self._convert_to_float32(data_normalized)
         X = self._sequentialize(data_normalized)[0]  # Only get inputs
 
         # If uncertainty is False, only do one sample prediction
-        if not self.uncertainty:
+        if not self.dropout_rate:
             n_samples = 1
 
         # Repeat the prediction n_samples times to generate samples from
         # approximate posterior predictive distribution.
-        samples = []
-        for _ in range(n_samples):
-            prediction = []
-            raw_prediction = self._model.predict(X, self.batch_size)
+        X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
 
-            # We need to reashape the raw_predictios in case the forecasting
-            # horizon is larger than 1 and in case more than one time series
-            # is fed into the model.The Keras model has no
-            # intrinsic notion of horizon.s
-            stride = int(len(raw_prediction) / n_series)  # reshaping stride
-            for i in range(n_series):
-                # Extract the prediciton for each individual series
-                prediction.append(
-                    raw_prediction[i * stride:(i + 1) * stride].T
-                )
-            prediction = np.array(prediction)
+        # Make predictions for parameters of pdfs then sample from pdfs
+        raw_predictions = self._model.predict(X, self.batch_size)
+        raw_predictions = self._loss.sample(raw_predictions)
 
-            # Reshape according to horizon length. Needs to happen to undo
-            # standadization.
-            if self.horizon == 1:
-                prediction = np.swapaxes(prediction, 0, 2)
-            else:
-                prediction = np.swapaxes(prediction, 0, 3)
-                prediction = np.swapaxes(prediction, 1, 2)
+        # Take care of means and standard deviations
+        predictions = self._unnormalize(raw_predictions)
 
-            samples.append(self._unnormalize(prediction, target=self.targets))
+        # Calculate staticts on predictions
+        predictions = np.array(np.vsplit(predictions, n_samples))
+        mean = np.mean(predictions, axis=0)
+        median = None
+        std = None
+        lower_quantile = None
+        upper_quantile = None
 
-        samples = np.array(samples)
+        if n_samples > 1:
+            median = np.median(predictions, axis=0)
+            std = np.std(predictions, axis=0)
+            lower_quantile = np.percentile(predictions, quantiles[0], axis=0)
+            upper_quantile = np.percentile(predictions, quantiles[1], axis=0)
 
-        # Calculate mean prediction.
-        mean_prediction = np.mean(samples, axis=0)
-
-        # Turn samples into quantiles for easier display later.
-        lower_quantile = np.nanpercentile(
-            samples, quantiles[0], axis=0) if self.uncertainty else None
-        upper_quantile = np.nanpercentile(
-            samples, quantiles[1], axis=0) if self.uncertainty else None
-        median_prediction = np.nanpercentile(
-            samples, 50, axis=0) if self.uncertainty else None
-
-        return {'mean': mean_prediction,
-                'median': median_prediction,
+        return {'mean': mean,
+                'median': median,
+                'std': std,
                 'lower_quantile': lower_quantile,
                 'upper_quantile': upper_quantile,
-                'samples': samples}
+                'samples': predictions}
+
+    @staticmethod
+    def _build_topology(topology):
+        """Return topology depending on user input (str or list)."""
+        if isinstance(topology, str):
+            return get_topology(topology)
+        if isinstance(topology, list):
+            return topology
+
+    @staticmethod
+    def _convert_to_float32(array):
+        """Converts all time series in an array to float32."""
+        out_array = np.copy(array)
+        for i, sub_array in enumerate(array):
+            out_array[i] = sub_array.astype('float32')
+        return out_array
+
+    def _sequentialize(self, data):
+        """Sequentialize time series array.
+        Create two numpy arrays, one for the windowed input time series X
+        and one for the corresponding output values that need to be
+        predicted.
+        """
+        # Redefine variable to keep further visual noise low
+        horizon = self.horizon
+        lookback = self.lookback
+
+        # Sequentialize the dataset, i.e., split it into shorter windowed
+        # sequences.
+        X, y = [], []
+        for time_series in data:
+            # Making sure the time_series dataset is in correct format
+            time_series = np.atleast_2d(time_series)
+
+            # Need the number of time steps per window and the number of
+            # covariates
+            n_time_steps, n_vars = time_series.shape
+
+            # No build the data structure
+            for j in range(n_time_steps - lookback + 1):
+                lookback_ts = time_series[j:j + lookback]
+                forecast_ts = time_series[j + lookback:j + lookback + horizon]
+                if len(forecast_ts) < horizon:
+                    forecast_ts = np.ones(shape=(horizon, n_vars)) * np.nan
+                X.append(lookback_ts)
+                if self.targets:
+                    y.append(forecast_ts[:, self.targets])
+                else:
+                    y.append(forecast_ts)
+
+        if not X or not y:
+            raise ValueError(
+                'Time series is too short for lookback and/or horizon. lookback {} + horizon {} > n_time_steps {}.'.format(
+                    lookback, horizon,
+                    n_time_steps
+                )
+            )
+
+        # Make sure we output numpy arrays.
+        X = np.array(X)
+        y = np.array(y)
+        return X, y
+
+    def _normalize(self, data, locked=False):
+        """normalize numpy array.
+        :param data: Input time series.
+        :type data: numpy array
+        :param data: Boolean that locks down the scales of the data.
+        :type data: boolean
+        """
+
+        if not locked:
+            # Need to normalize over time and independent time series
+            for i, time_series in enumerate(data):
+                if i == 0:
+                    stacked_data = np.vstack(time_series)
+                else:
+                    stacked_data = np.vstack((stacked_data, time_series))
+
+            self._data_means = np.mean(stacked_data, axis=0)
+            self._data_scales = np.std(stacked_data, axis=0)
+            self._is_normalized = True
+        else:
+            self._check_is_normalized()
+
+        return (data - self._data_means) / self._data_scales
+
+    def _unnormalize(self, data, targets=None):
+        """Un-normalize numpy array."""
+        self._check_is_normalized()
+
+        # Unnormalize, taking presence of covariates into account.
+        if targets:
+            means = self._data_means[targets]
+            scales = self._data_scales[targets]
+            return data * scales + means
+        else:
+            return data * self._data_scales + self._data_means
+
+    def _check_data_format(self, data):
+        """Raise error if data has incorrect format."""
+        # Check if data has any NaNs.
+        if np.isnan([np.isnan(x).any() for x in data]).any():
+            raise ValueError('data should not contain NaNs.')
+
+        # Check if data is long enough for forecasting horizon.
+        if np.array([len(x) <= self.horizon for x in data]).any():
+            raise ValueError('Time series must be longer than horizon.')
+
+    def _check_is_fitted(self):
+        """Raise error if model has not been fitted to data."""
+        if not self._is_fitted:
+            raise ValueError('The model has not been fitted.')
+
+    def _check_is_normalized(self):
+        """Raise error if model data was not normalized."""
+        if not self._is_normalized:
+            raise ValueError('The data has not been normalized.')
 
     @property
     def horizon(self):
@@ -214,14 +342,14 @@ class Forecaster():
         self._horizon = int(horizon)
 
     @property
-    def lag(self):
-        """Return the lag."""
-        return self._lag
+    def lookback(self):
+        """Return the lookback."""
+        return self._lookback
 
-    @lag.setter
-    def lag(self, lag):
-        """Instantiate the lag."""
-        self._lag = int(lag)
+    @lookback.setter
+    def lookback(self, lookback):
+        """Instantiate the lookback."""
+        self._lookback = int(lookback)
 
     @property
     def batch_size(self):
@@ -262,124 +390,121 @@ class Forecaster():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
 
-    @staticmethod
-    def _build_topology(topology):
-        """Return topology depending on user input (str or list)."""
-        if isinstance(topology, str):
-            return get_topology(topology)
-        if isinstance(topology, list):
-            return topology
 
-    @staticmethod
-    def _convert_to_float32(array):
-        out_array = np.copy(array)
-        for i, sub_array in enumerate(array):
-            out_array[i] = sub_array.astype('float32')
-        return out_array
+class TemporalCrossValidator():
+    """Temporal cross-validator class.
 
-    def _sequentialize(self, data):
-        """Sequentialize time series array.
-        Create two numpy arrays, one for the windowed input time series X
-        and one for the corresponding output values that need to be
-        predicted.
+    This class performs temporal (causal) cross-validation similar to the
+    approach in  https://robjhyndman.com/papers/cv-wp.pdf.
+
+    :param forecaster: Forecaster.
+    :type forecaster: A forecaster class
+    :param data: Data set to used for cross-validation.
+    :type data: numpy array
+    :param train_frac: Fraction of data to be used for training per fold.
+    :type train_frac: float
+    :param n_folds: Number of temporal folds.
+    :type n_folds: int
+    :param loss: The kind of loss used for evaluating the forecaster on folds.
+    :type loss: string
+
+    """
+
+    def __init__(self,
+                 forecaster: Forecaster,
+                 train_frac=0.5,
+                 n_folds=5,
+                 loss='mse'):
+        """Initialize properties."""
+        self.forecaster = forecaster
+        self.train_frac = train_frac
+        self.n_folds = n_folds
+        self.loss = loss
+
+    def evaluate(self, data, verbose=True):
+        """Evaluate forecaster with forecaster parameters params.
+
+        :param params: Dictionary that contains parameters for forecaster.
+        :type params: dict
+
         """
-        # Redefine variable to keep further visual noise low
-        horizon = self.horizon
-        lag = self.lag
-        target_inds = self.targets
 
-        # Sequentialize the dataset, i.e., split it into shorter windowed
-        # sequences.
-        X, y = [], []
-        for i, time_series in enumerate(data):
-            # Making sure the time_series dataset is in correct numpy format
-            time_series = np.atleast_2d(time_series)
-            if time_series.shape[0] < time_series.shape[1]:
-                time_series = time_series.T
+        # Instantiate the appropriate loss metric and get the folds for
+        # evaluating the forecaster. We want to use a generator here to save
+        # some space.
+        lag = self.forecaster.lag
+        folds = self._generate_folds(data, lag)
 
-            n_time_steps = time_series.shape[0]  # Number of time steps
+        train_losses, test_losses = [], []
+        for i, (data_train, data_test) in enumerate(folds):
+            # Quietly fit the forecaster
+            forecaster = self.forecaster
+            t0 = time.time()
+            forecaster.fit(data_train, verbose=0)
+            duration = time.time() - t0
 
-            # Restructure time series data into chunks according to window
-            # (lag) size and horizon
-            for j in range(n_time_steps - lag):
-                if j + lag + horizon <= n_time_steps:
-                    # Store features of this data point
-                    X.append(time_series[j:j + lag, :])
+            # Calculate forecaster performance
+            train_predictions = forecaster.predict(data_train)['mean']
+            test_predictions = forecaster.predict(data_test)['mean']
 
-                    # Store target value of this data point
-                    forecast_inds = range(j + lag, j + lag + horizon)
-                    if target_inds:
-                        y.append(time_series[forecast_inds, :][:, target_inds])
-                    else:
-                        y.append(time_series[forecast_inds, :])
+            train_actuals = data_train[lag:]
+            test_actuals = data_test[lag:]
 
-        # We need to catch the cases where lags, horizons, and number of time
-        # steps are not compatible
-        if not X or not y:
-            raise ValueError(
-                'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
-                    lag, horizon,
-                    n_time_steps
+            # Make sure the loss function knows about the multi-step
+            # forecasting procedure.
+            loss = getattr(metrics, self.loss)
+            if forecaster.horizon > 1:
+                loss = metrics.adjust_for_horizon(loss)
+
+            train_loss = round(loss(train_predictions, train_actuals), 2)
+            test_loss = round(loss(test_predictions, test_actuals), 2)
+
+            train_losses.append(train_loss)
+            test_losses.append(test_loss)
+
+            # Report progress if requested
+            if verbose:
+                print(
+                    'Fold {}: Train {}:{}, Test {}:{}'.format(
+                        i,
+                        self.loss,
+                        train_loss,
+                        self.loss,
+                        test_loss
+                    )
                 )
-            )
 
-        # Make sure we output numpy arrays.
-        X = np.array(X)
-        y = np.array(y)
-        return X, y
+        # We only need some loss statistics. We use the name 'loss' in this
+        # dictionary to denote the main quantity of interest, because
+        # hyperopt expect a dictionary with a 'loss' key.
+        scores = {
+            'train_loss': np.mean(train_losses),
+            'train_loss_std': np.std(train_losses),
+            'train_loss_min': np.min(train_losses),
+            'train_loss_max': np.max(train_losses),
+            'loss': np.mean(test_losses),
+            'loss_std': np.std(test_losses),
+            'loss_min': np.min(test_losses),
+            'loss_max': np.max(test_losses),
+            'training_time': duration
+        }
 
-    def _normalize(self, data, locked=False):
-        """normalize numpy array.
-        :param data: Input time series.
-        :type data: numpy array
-        :param data: Boolean that locks down the scales of the data.
-        :type data: boolean
-        """
+        return scores
 
-        if not locked:
-                # Need to normalize over time and independent time series
-            for i, time_series in enumerate(data):
-                if i == 0:
-                    stacked_data = np.vstack(time_series)
-                else:
-                    stacked_data = np.vstack((stacked_data, time_series))
+    def _generate_folds(self, data, lag):
+        """Yield a the data folds."""
+        n_steps = data.shape[1]
+        train_length = int(n_steps * self.train_frac)
+        fold_length = (n_steps - train_length) // self.n_folds
 
-            self._data_means = np.mean(stacked_data)
-            self._data_scales = np.std(stacked_data)
-            self._is_normalized = True
-        else:
-            self._check_is_normalized()
+        # Loopp over number of folds to generate folds for cross-validation
+        # but make sure that the train and test part of the time series
+        # dataset overlap appropriately to account for the lag window.
+        for i in range(self.n_folds):
+            a = i * fold_length
+            b = (i + 1) * fold_length
+            lb = lag
+            data_train = data[:, a:train_length + a, :]
+            data_test = data[:, train_length + a - lb:train_length + b, :]
 
-        return (data - np.mean(stacked_data)) / np.std(stacked_data)
-
-    def _unnormalize(self, data, targets=None):
-        """Un-normalize numpy array."""
-        self._check_is_normalized()
-
-        # Unnormalize, taking presence of covariates into account.
-        if targets:
-            means = self._data_means[targets]
-            scales = self._data_scales[targets]
-            return data * scales + means
-        else:
-            return data * self._data_scales + self._data_means
-
-    def _check_data_format(self, data):
-        """Raise error if data has incorrect format."""
-        # Check if data has any NaNs.
-        if np.isnan([np.isnan(x).any() for x in data]).any():
-            raise ValueError('data should not contain NaNs.')
-
-        # Check if data is long enough for forecasting horizon.
-        if len(data) <= self.horizon:
-            raise ValueError('Time series must be longer than horizon.')
-
-    def _check_is_fitted(self):
-        """Raise error if model has not been fitted to data."""
-        if not self._is_fitted:
-            raise ValueError('The model has not been fitted.')
-
-    def _check_is_normalized(self):
-        """Raise error if model data was not normalized."""
-        if not self._is_normalized:
-            raise ValueError('The data has not been normalized.')
+            yield (data_train, data_test)

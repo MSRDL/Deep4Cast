@@ -1,30 +1,7 @@
 # -*- coding: utf-8 -*-
 """Metrics module for error functions."""
 
-from functools import wraps
-
 import numpy as np
-
-
-def adjust_for_horizon(metric):
-    @wraps(metric)
-    def adjusted_metric(data, data_truth):
-        # Check if the data has a second dimension (that we interpret as the
-        # dimension for multiple steps ahead when doing predictions).
-        if len(data.shape) == 4:
-            data_truth_adjusted = []
-            n = len(data_truth)  # number of time steps in the data
-            horizon = data.shape[1]  # extract the length for horizon.
-            for i in range(horizon):
-                data_truth_adjusted.append(data_truth[i:n-horizon+i+1])
-            data_truth_adjusted = np.array(data_truth_adjusted)
-            data_truth_adjusted = np.swapaxes(data_truth_adjusted, 0, 1)
-        else:
-            data_truth_adjusted = data_truth
-
-        return metric(data, data_truth_adjusted)
-
-    return adjusted_metric
 
 
 def mae(data, data_truth):
@@ -36,7 +13,6 @@ def mae(data, data_truth):
     :type data_truth: numpy array
 
     """
-
 
     return np.mean(np.abs(data - data_truth))
 
