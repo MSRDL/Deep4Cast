@@ -36,7 +36,7 @@ class Forecaster():
                  horizon: int,
                  loss='mse',
                  optimizer='sgd',
-                 batch_size=16,
+                 batch_size=8,
                  max_epochs=1000,
                  dropout_rate=None,
                  seed=None,
@@ -143,6 +143,7 @@ class Forecaster():
         self.history = self._model.fit(
             X_train,
             y_train,
+            shuffle=False,
             batch_size=int(self.batch_size),
             epochs=int(self.max_epochs),
             validation_data=(X_val, y_val),
