@@ -36,7 +36,7 @@ class Forecaster():
                  horizon: int,
                  loss='mse',
                  optimizer='sgd',
-                 batch_size=8,
+                 batch_size=16,
                  max_epochs=1000,
                  dropout_rate=None,
                  seed=None,
@@ -71,7 +71,13 @@ class Forecaster():
         self._is_fitted = False
         self._is_normalized = False
 
-    def fit(self, data, targets=None, val_frac=0.1, patience=5, verbose=0):
+    def fit(self,
+            data,
+            targets=None,
+            normalize=False,
+            val_frac=0.1,
+            patience=5,
+            verbose=0):
         """Fit model to data.
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
@@ -98,7 +104,10 @@ class Forecaster():
         self.targets = targets
 
         # When data format has been succesfully checked normalize it.
-        data_normalized = self._normalize(data)
+        if normalize:
+            data_normalized = self._normalize(data)
+        else:
+            data_normalized = data
         data_normalized = self._convert_to_float32(data_normalized)
 
         # The model expects input-output data pairs, so we create them from
@@ -170,11 +179,13 @@ class Forecaster():
         data_pred = np.array(data_pred)
 
         self._check_is_fitted()
-        self._check_is_normalized()
         self._check_data_format(data)
 
         # Bring input into correct format for model train and prediction
-        data_normalized = self._normalize(data_pred, locked=True)
+        if _is_normalized:
+            data_normalized = self._normalize(data_pred, locked=True)
+        else:
+            data_normalized = data
         data_normalized = self._convert_to_float32(data_normalized)
         X = self._sequentialize(data_normalized)[0]  # Only get inputs
 
@@ -190,8 +201,11 @@ class Forecaster():
         raw_predictions = self._model.predict(X, self.batch_size)
         raw_predictions = self._loss.sample(raw_predictions)
 
-        # Take care of means and standard deviations
-        predictions = self._unnormalize(raw_predictions)
+        # Take care of normalization
+        if _is_normalized:
+            predictions = self._unnormalize(raw_predictions)
+        else:
+            predictions = raw_predictions
 
         # Calculate staticts on predictions
         predictions = np.array(np.vsplit(predictions, n_samples))
@@ -301,7 +315,8 @@ class Forecaster():
         # Normalize data
         data_normalized = np.copy(data)
         for i, time_series in enumerate(data):
-            data_normalized[i] = (time_series - self._data_means) / self._data_scales
+            data_normalized[i] = (
+                time_series - self._data_means) / self._data_scales
 
         return data_normalized
 
