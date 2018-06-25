@@ -102,7 +102,7 @@ class heteroscedastic_gaussian():
 
         # Calculate the mean error over all data points
         squares = K.square(mean - y)
-        weighted_squares = 0.5 * (squares * inv_var + log_var)
+        weighted_squares = (squares * inv_var + log_var)
         heteroscedastic_loss = K.mean(weighted_squares)
 
         return heteroscedastic_loss

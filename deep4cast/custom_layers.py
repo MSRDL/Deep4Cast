@@ -4,6 +4,8 @@
 from keras.layers import Layer, Dropout
 from keras import backend as K
 from keras.legacy import interfaces
+from keras import initializers
+from keras.engine import InputSpec
 
 
 class MCDropout(Dropout):

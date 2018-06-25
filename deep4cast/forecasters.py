@@ -32,7 +32,7 @@ class Forecaster():
 
     def __init__(self,
                  topology,
-                 lookback: int,
+                 lag: int,
                  horizon: int,
                  loss='mse',
                  optimizer='sgd',
@@ -53,7 +53,7 @@ class Forecaster():
         self.optimizer = optimizer
         self.set_optimizer_args(kwargs)
 
-        self.lookback = lookback
+        self.lag = lag
         self.horizon = horizon
         self.batch_size = batch_size
         self.max_epochs = max_epochs
@@ -103,8 +103,8 @@ class Forecaster():
 
         # The model expects input-output data pairs, so we create them from
         # the normalized time series arrary by windowing. Xs are 3D tensors
-        # of shape number of steps * lookback * dimensionality and
-        # ys are 2D tensors of lookback * dimensionality.
+        # of shape number of steps * lag * dimensionality and
+        # ys are 2D tensors of lag * dimensionality.
         X, y = self._sequentialize(data_normalized)
         X = X[~np.isnan(y)[:, 0, 0]]
         y = y[~np.isnan(y)[:, 0, 0]]
@@ -117,12 +117,12 @@ class Forecaster():
         y_val = y[-n_val:]
 
         # Prepare model output shape based on loss function
-        # This is to handle loss functions that required multiple parameters
+        # This is to handle loss functions that requires multiple parameters
         self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
 
-        # Set up the model based on internal model class.
+        # Set up the model based on internal model class
         self._model = self.model_class(
             input_shape=X.shape[1:],
             output_shape=output_shape,
@@ -130,7 +130,7 @@ class Forecaster():
             dropout_rate=self.dropout_rate
         )
 
-        # Keras needs to compile the computational graph before fitting.
+        # Keras needs to compile the computational graph before fitting
         self._model.compile(
             loss=self._loss,
             optimizer=self._optimizer
@@ -139,7 +139,7 @@ class Forecaster():
         # Set up early stopping callback
         es = EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)
 
-        # Print the model topology and parameters before fitting.
+        # Print the model topology and parameters before fitting
         self.history = self._model.fit(
             X_train,
             y_train,
@@ -151,7 +151,7 @@ class Forecaster():
             verbose=verbose
         )
 
-        # Change state to fitted so that other methods work correctly.
+        # Change state to fitted so that other methods work correctly
         self._is_fitted = True
         self.summary = self._model.summary
 
@@ -166,7 +166,7 @@ class Forecaster():
         """
         data_pred = []
         for time_series in data:
-            data_pred.append(time_series[-self.lookback:, :])
+            data_pred.append(time_series[-self.lag:, :])
         data_pred = np.array(data_pred)
 
         self._check_is_fitted()
@@ -238,7 +238,7 @@ class Forecaster():
         """
         # Redefine variable to keep further visual noise low
         horizon = self.horizon
-        lookback = self.lookback
+        lag = self.lag
 
         # Sequentialize the dataset, i.e., split it into shorter windowed
         # sequences.
@@ -252,12 +252,12 @@ class Forecaster():
             n_time_steps, n_vars = time_series.shape
 
             # No build the data structure
-            for j in range(n_time_steps - lookback + 1):
-                lookback_ts = time_series[j:j + lookback]
-                forecast_ts = time_series[j + lookback:j + lookback + horizon]
+            for j in range(n_time_steps - lag + 1):
+                lag_ts = time_series[j:j + lag]
+                forecast_ts = time_series[j + lag:j + lag + horizon]
                 if len(forecast_ts) < horizon:
                     forecast_ts = np.ones(shape=(horizon, n_vars)) * np.nan
-                X.append(lookback_ts)
+                X.append(lag_ts)
                 if self.targets:
                     y.append(forecast_ts[:, self.targets])
                 else:
@@ -265,8 +265,8 @@ class Forecaster():
 
         if not X or not y:
             raise ValueError(
-                'Time series is too short for lookback and/or horizon. lookback {} + horizon {} > n_time_steps {}.'.format(
-                    lookback, horizon,
+                'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
+                    lag, horizon,
                     n_time_steps
                 )
             )
@@ -298,7 +298,12 @@ class Forecaster():
         else:
             self._check_is_normalized()
 
-        return (data - self._data_means) / self._data_scales
+        # Normalize data
+        data_normalized = np.copy(data)
+        for i, time_series in enumerate(data):
+            data_normalized[i] = (time_series - self._data_means) / self._data_scales
+
+        return data_normalized
 
     def _unnormalize(self, data, targets=None):
         """Un-normalize numpy array."""
@@ -343,14 +348,14 @@ class Forecaster():
         self._horizon = int(horizon)
 
     @property
-    def lookback(self):
-        """Return the lookback."""
-        return self._lookback
+    def lag(self):
+        """Return the lag."""
+        return self._lag
 
-    @lookback.setter
-    def lookback(self, lookback):
-        """Instantiate the lookback."""
-        self._lookback = int(lookback)
+    @lag.setter
+    def lag(self, lag):
+        """Instantiate the lag."""
+        self._lag = int(lag)
 
     @property
     def batch_size(self):
