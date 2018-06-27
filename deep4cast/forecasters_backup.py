@@ -39,6 +39,7 @@ class Forecaster():
                  batch_size=8,
                  max_epochs=1000,
                  dropout_rate=None,
+                 seed=None,
                  **kwargs):
         """Initialize properties."""
 
@@ -57,15 +58,14 @@ class Forecaster():
         self.batch_size = batch_size
         self.max_epochs = max_epochs
         self.loss = loss
+        self.seed = seed
         self.history = None
         self._loss = None
         self.targets = None
 
         # Attributes related to input data (these are set during fitting)
-        self._features_means = None
-        self._features_scales = None
-        self._targets_means = None
-        self._targets_scales = None
+        self._data_means = None
+        self._data_scales = None
 
         # Boolean checks
         self._is_fitted = False
@@ -86,30 +86,30 @@ class Forecaster():
             2 = one line per epoch.
         :type verbose: int
         """
+        self._check_data_format(data)
+
+        # We sometimes want to fix the pseudo random number generator seed
+        # when we are debugging.
+        if self.seed:
+            np.random.seed(self.seed)
+
         # Store a dictionary of lists that contain the indicies of
         # target variables, dynamic, and static covariates.
         self.targets = targets
 
-        # Check if data doesn't contains NaNs and such
-        self._check_data_format(data)
-
-        # Make sure the floats have the correct format
-        data_train = self._convert_to_float32(data)
+        # When data format has been succesfully checked normalize it.
+        data_normalized = self._normalize(data)
+        data_normalized = self._convert_to_float32(data_normalized)
 
         # The model expects input-output data pairs, so we create them from
-        # the time series arrary by windowing. Xs are 3D tensors
-        # of shape number of batch_size, timesteps, input_dim and
+        # the normalized time series arrary by windowing. Xs are 3D tensors
+        # of shape number of steps * lag * dimensionality and
         # ys are 2D tensors of lag * dimensionality.
-        X, y = self._sequentialize(data_train)
-
-        # Remove NaN's from windowing
+        X, y = self._sequentialize(data_normalized)
         X = X[~np.isnan(y)[:, 0, 0]]
         y = y[~np.isnan(y)[:, 0, 0]]
 
-        # Standardize the data before feeding it into the model
-        X, y = self._normalize(X, y)
-
-        # Split into training and validation for early stopping
+        # Split into training and validation
         n_val = int(len(X) * val_frac)
         X_train = X[:-n_val]
         y_train = y[:-n_val]
@@ -118,7 +118,6 @@ class Forecaster():
 
         # Prepare model output shape based on loss function
         # This is to handle loss functions that requires multiple parameters
-        # such as the heteroscedsatic Gaussian
         self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
@@ -144,7 +143,7 @@ class Forecaster():
         self.history = self._model.fit(
             X_train,
             y_train,
-            shuffle=True,
+            shuffle=False,
             batch_size=int(self.batch_size),
             epochs=int(self.max_epochs),
             validation_data=(X_val, y_val),
@@ -154,8 +153,6 @@ class Forecaster():
 
         # Change state to fitted so that other methods work correctly
         self._is_fitted = True
-
-        # Store the model summary
         self.summary = self._model.summary
 
     def predict(self, data, n_samples=100, quantiles=(5, 95)):
@@ -167,27 +164,19 @@ class Forecaster():
         :param quantiles: Tuple of quantiles for credicble interval.
         :type quantiles: tuple
         """
-        # Check if model is fitted and data doesn't contains NaNs and such
-        self._check_is_fitted()
-        self._check_data_format(data)
-
-        # Now only use the last windows from the input sequences
         data_pred = []
         for time_series in data:
             data_pred.append(time_series[-self.lag:, :])
         data_pred = np.array(data_pred)
 
-        # Make sure the floats have the correct format
-        data_pred = self._convert_to_float32(data_pred)
+        self._check_is_fitted()
+        self._check_is_normalized()
+        self._check_data_format(data)
 
-        # The model expects input-output data pairs, so we create them from
-        # the time series arrary by windowing. Xs are 3D tensors
-        # of shape number of batch_size, timesteps, input_dim and
-        # ys are 2D tensors of lag * dimensionality.
-        X, y = self._sequentialize(data_pred)
-
-        # Standardize the data before feeding it into the model
-        X, y = self._normalize(X, y, locked=True)
+        # Bring input into correct format for model train and prediction
+        data_normalized = self._normalize(data_pred, locked=True)
+        data_normalized = self._convert_to_float32(data_normalized)
+        X = self._sequentialize(data_normalized)[0]  # Only get inputs
 
         # If uncertainty is False, only do one sample prediction
         if not self.dropout_rate:
@@ -202,7 +191,7 @@ class Forecaster():
         raw_predictions = self._loss.sample(raw_predictions)
 
         # Take care of means and standard deviations
-        predictions = self._unnormalize_targets(raw_predictions)
+        predictions = self._unnormalize(raw_predictions)
 
         # Calculate staticts on predictions
         predictions = np.array(np.vsplit(predictions, n_samples))
@@ -287,7 +276,7 @@ class Forecaster():
         y = np.array(y)
         return X, y
 
-    def _normalize(self, X, y, locked=False):
+    def _normalize(self, data, locked=False):
         """normalize numpy array.
         :param data: Input time series.
         :type data: numpy array
@@ -296,24 +285,37 @@ class Forecaster():
         """
 
         if not locked:
-            self._features_means = np.mean(X, axis=0)
-            self._features_scales = np.std(X, axis=0)
-            self._target_means = np.mean(y, axis=0)
-            self._target_scales = np.std(y, axis=0)
+            # Need to normalize over time and independent time series
+            for i, time_series in enumerate(data):
+                if i == 0:
+                    stacked_data = np.vstack(time_series)
+                else:
+                    stacked_data = np.vstack((stacked_data, time_series))
+
+            self._data_means = np.mean(stacked_data, axis=0)
+            self._data_scales = np.std(stacked_data, axis=0)
             self._is_normalized = True
+        else:
+            self._check_is_normalized()
 
-        # Standardize the data
-        X_norm = np.copy(X)
-        y_norm = np.copy(y)
-        X_norm = (X_norm - self._features_means) / self._features_scales
-        y_norm = (y_norm - self._target_means) / self._target_scales
+        # Normalize data
+        data_normalized = np.copy(data)
+        for i, time_series in enumerate(data):
+            data_normalized[i] = (time_series - self._data_means) / self._data_scales
 
-        return X_norm, y_norm
+        return data_normalized
 
-    def _unnormalize_targets(self, y):
+    def _unnormalize(self, data, targets=None):
         """Un-normalize numpy array."""
+        self._check_is_normalized()
+
         # Unnormalize, taking presence of covariates into account.
-        return y * self._target_scales + self._target_means
+        if targets:
+            means = self._data_means[targets]
+            scales = self._data_scales[targets]
+            return data * scales + means
+        else:
+            return data * self._data_scales + self._data_means
 
     def _check_data_format(self, data):
         """Raise error if data has incorrect format."""
@@ -329,6 +331,11 @@ class Forecaster():
         """Raise error if model has not been fitted to data."""
         if not self._is_fitted:
             raise ValueError('The model has not been fitted.')
+
+    def _check_is_normalized(self):
+        """Raise error if model data was not normalized."""
+        if not self._is_normalized:
+            raise ValueError('The data has not been normalized.')
 
     @property
     def horizon(self):
