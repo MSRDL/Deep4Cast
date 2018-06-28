@@ -5,11 +5,12 @@ series given as numpy arrays.
 """
 from inspect import getargspec
 
+import time
 import numpy as np
 import keras.optimizers
 from keras.callbacks import EarlyStopping
 
-from . import custom_losses
+from . import custom_losses, metrics
 from .models import SharedLayerModel
 from .topologies import get_topology
 
@@ -224,18 +225,13 @@ class Forecaster():
 
             # predictions = np.array(np.vsplit(predictions, n_samples))
             mean = np.mean(predictions, axis=0)
-            std = None
-            lower_quantile = None
-            upper_quantile = None
-
-            if n_samples > 1:
-                std = np.std(predictions, axis=0)
-                lower_quantile = np.percentile(
-                    predictions, quantiles[0], axis=0
-                )
-                upper_quantile = np.percentile(
-                    predictions, quantiles[1], axis=0
-                )
+            std = np.std(predictions, axis=0)
+            lower_quantile = np.percentile(
+                predictions, quantiles[0], axis=0
+            )
+            upper_quantile = np.percentile(
+                predictions, quantiles[1], axis=0
+            )
 
             means.append(mean)
             stds.append(std)
@@ -442,16 +438,14 @@ class TemporalCrossValidator():
 
     def __init__(self,
                  forecaster: Forecaster,
-                 train_frac=0.5,
                  n_folds=5,
                  loss='mse'):
         """Initialize properties."""
         self.forecaster = forecaster
-        self.train_frac = train_frac
         self.n_folds = n_folds
         self.loss = loss
 
-    def evaluate(self, data, verbose=True):
+    def evaluate(self, data, targets=None, patience=10, verbose=True):
         """Evaluate forecaster with forecaster parameters params.
 
         :param params: Dictionary that contains parameters for forecaster.
@@ -462,45 +456,37 @@ class TemporalCrossValidator():
         # Instantiate the appropriate loss metric and get the folds for
         # evaluating the forecaster. We want to use a generator here to save
         # some space.
-        lag = self.forecaster.lag
-        folds = self._generate_folds(data, lag)
+        folds = self._generate_folds(data)
 
-        train_losses, test_losses = [], []
+        losses = []
         for i, (data_train, data_test) in enumerate(folds):
             # Quietly fit the forecaster
             forecaster = self.forecaster
             t0 = time.time()
-            forecaster.fit(data_train, verbose=0)
+            forecaster.fit(
+                data_train,
+                targets=targets,
+                patience=patience,
+                verbose=0
+            )
             duration = time.time() - t0
 
             # Calculate forecaster performance
-            train_predictions = forecaster.predict(data_train)['mean']
-            test_predictions = forecaster.predict(data_test)['mean']
-
-            train_actuals = data_train[lag:]
-            test_actuals = data_test[lag:]
-
-            # Make sure the loss function knows about the multi-step
-            # forecasting procedure.
+            predictions = forecaster.predict(data_train)
             loss = getattr(metrics, self.loss)
-            if forecaster.horizon > 1:
-                loss = metrics.adjust_for_horizon(loss)
-
-            train_loss = round(loss(train_predictions, train_actuals), 2)
-            test_loss = round(loss(test_predictions, test_actuals), 2)
-
-            train_losses.append(train_loss)
-            test_losses.append(test_loss)
+            loss = round(metrics.mse(
+                predictions['mean'], data_test[:, :, targets]),
+                2
+            )
+            losses.append(loss)
 
             # Report progress if requested
             if verbose:
                 print(
-                    'Fold {}: Train {}:{}, Test {}:{}'.format(
+                    'Fold {}: Test {}:{}'.format(
                         i,
                         self.loss,
-                        train_loss,
-                        self.loss,
-                        test_loss
+                        loss
                     )
                 )
 
@@ -508,33 +494,34 @@ class TemporalCrossValidator():
         # dictionary to denote the main quantity of interest, because
         # hyperopt expect a dictionary with a 'loss' key.
         scores = {
-            'train_loss': np.mean(train_losses),
-            'train_loss_std': np.std(train_losses),
-            'train_loss_min': np.min(train_losses),
-            'train_loss_max': np.max(train_losses),
-            'loss': np.mean(test_losses),
-            'loss_std': np.std(test_losses),
-            'loss_min': np.min(test_losses),
-            'loss_max': np.max(test_losses),
+            'loss': np.mean(losses),
+            'loss_std': np.std(losses),
+            'loss_min': np.min(losses),
+            'loss_max': np.max(losses),
             'training_time': duration
         }
 
         return scores
 
-    def _generate_folds(self, data, lag):
-        """Yield a the data folds."""
-        n_steps = data.shape[1]
-        train_length = int(n_steps * self.train_frac)
-        fold_length = (n_steps - train_length) // self.n_folds
+    def _generate_folds(self, data):
+        """Yield a data fold."""
+        horizon = self.forecaster.horizon
+        train_length = data.shape[1] - horizon * self.n_folds
 
-        # Loopp over number of folds to generate folds for cross-validation
+        # Loop over number of folds to generate folds for cross-validation
         # but make sure that the train and test part of the time series
         # dataset overlap appropriately to account for the lag window.
         for i in range(self.n_folds):
-            a = i * fold_length
-            b = (i + 1) * fold_length
-            lb = lag
-            data_train = data[:, a:train_length + a, :]
-            data_test = data[:, train_length + a - lb:train_length + b, :]
+            data_train, data_test = [], []
+            for time_series in data:
+                data_train.append(
+                    time_series[i * horizon: train_length + i * horizon, :]
+                )
+                data_test.append(
+                    time_series[train_length + i *
+                                horizon: train_length + (i + 1) * horizon, :]
+                )
+            data_train = np.array(data_train)
+            data_test = np.array(data_test)
 
             yield (data_train, data_test)
