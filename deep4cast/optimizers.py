@@ -12,8 +12,7 @@ from inspect import getargspec
 import numpy as np
 
 from hyperopt import hp, fmin, tpe, Trials, STATUS_OK, STATUS_FAIL
-from .forecasters import Forecaster
-from .validators import TemporalCrossValidator
+from .forecasters import Forecaster, TemporalCrossValidator
 
 # Set the optimizable arguments globally and assign a hyperopt probability
 # distribution to each of them.
@@ -70,7 +69,7 @@ _ALLOWED_OPTIMIZER_ARGS = {
 _ALLOWED_FORECASTER_ARGS = {
     'lag': partial(hp.quniform, q=1.0),
     'batch_size': partial(hp.quniform, q=1.0),
-    'epochs': partial(hp.quniform, q=1.0),
+    'optimizer': hp.choice,
     'dropout_rate': hp.uniform
 }
 
@@ -99,10 +98,9 @@ class HyperOptimizer():
         self.forecaster = forecaster
         self.domain = domain
         self.n_iter = n_iter
-        self.train_frac = 0.7
         self.n_folds = 3
         self.loss = 'mape'
-        allowed_args = ('train_frac', 'n_folds', 'loss')
+        allowed_args = ('n_folds', 'loss')
         for arg, value in kwargs.items():
             if arg in allowed_args:
                 setattr(self, arg, value)
@@ -143,8 +141,8 @@ class HyperOptimizer():
             forecaster_params = [
                 'lag',
                 'horizon',
+                'optimizer',
                 'batch_size',
-                'epochs',
                 'dropout_rate'
             ]
 
@@ -170,7 +168,6 @@ class HyperOptimizer():
             validator = self.validator(
                 self.forecaster,
                 self.data,
-                self.train_frac,
                 self.n_folds,
                 self.loss
             )
@@ -198,7 +195,7 @@ class HyperOptimizer():
             'lag',
             'horizon',
             'batch_size',
-            'epochs',
+            'optimizer',
             'dropout_rate'
         ]
 

@@ -28,8 +28,6 @@ class SharedLayerModel(Model):
     :type output_shape: tuple
     :param topology: Neural network topology.
     :type topology: list
-    :param uncertainty: True if applying MC Dropout after every layer.
-    :type uncertainty: boolean
     :param dropout_rate:  Fraction of the units to drop for the linear
         transformation of the inputs. Float between 0 and 1.
     :type dropout_rate: float
@@ -40,17 +38,15 @@ class SharedLayerModel(Model):
                  input_shape,
                  output_shape,
                  topology,
-                 uncertainty=False,
-                 concreteDropout=False,
-                 dropout_rate=0.1):
+                 dropout_rate=None):
         """Initialize attributes."""
         self._input_shape = input_shape
         self._output_shape = output_shape
         self._topology = topology
         self._rnd_init = 'glorot_normal'
-        self._uncertainty = uncertainty
-        self._concreteDropout = concreteDropout
         self._dropout_rate = dropout_rate
+        #self._dropout_layer = custom_layers.ConcreteDropout
+        self._dropout_layer = custom_layers.MCDropout
 
         # Initialize super class with custom layers
         inputs, outputs = self._build_layers()
@@ -99,19 +95,14 @@ class SharedLayerModel(Model):
             for parent_id in parent_ids:
                 next_id = parent_id
 
-                if self._uncertainty:
+                if self._dropout_rate:
                     # If MC Dropout, aka the Bayesian approximation to Neural
                     # Networks should be used, we add Dropout after each layer,
                     # even at test time.
                     dropout_id = next_id + '_' + layer_id + '_dropout'
-                    if self._concreteDropout:
-                        layers[dropout_id] = custom_layers.ConcreteDropout(
-                            layers[next_id]
-                        )
-                    else:
-                        layers[dropout_id] = custom_layers.MCDropout(rate)(
-                            layers[next_id]
-                        )
+                    layers[dropout_id] = self._dropout_layer(rate)(
+                        layers[next_id]
+                    )
                     next_id = dropout_id
 
                 parents.append(layers[next_id])
@@ -126,20 +117,18 @@ class SharedLayerModel(Model):
 
         # Need to handle the output layer and reshaping for multi-step
         # forecasting.
-        if self._uncertainty:
+        if self._dropout_rate:
             dropout_id = layer_id + '_dense_dropout'
-            if self._concreteDropout:
-                layers[dropout_id] = custom_layers.ConcreteDropout(
-                    layers[layer_id]
-                )
-            else:
-                layers[dropout_id] = custom_layers.MCDropout(rate)(
-                    layers[layer_id]
-                )
+            layers[dropout_id] = self._dropout_layer(rate)(
+                layers[layer_id]
+            )
             layer_id = dropout_id
 
         layer_cls = keras.layers.Dense
-        params = {'units': np.prod(self._output_shape)}
+        params = {
+            'units': np.prod(self._output_shape),
+            'kernel_initializer': 'glorot_normal'
+        }
         layers['_dense'] = layer_cls(**params)(layers[layer_id])
 
         layer_cls = keras.layers.Reshape

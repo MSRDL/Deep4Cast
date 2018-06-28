@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
 """Metrics module for error functions."""
 
-from functools import wraps
 
 import numpy as np
 
 
 def mae(data, data_truth):
     """Computes mean absolute error (MAE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     return np.mean(np.abs(data - data_truth))
@@ -21,12 +18,10 @@ def mae(data, data_truth):
 
 def mape(data, data_truth):
     """Computes mean absolute percentage error (MAPE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     eps = 1e-16  # Need to make sure that denominator is not zero
@@ -37,12 +32,10 @@ def mape(data, data_truth):
 
 def mse(data, data_truth):
     """Computes mean squared error (MSE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     return np.mean(np.square((data - data_truth)))
@@ -50,12 +43,10 @@ def mse(data, data_truth):
 
 def rmse(data, data_truth):
     """Computes root-mean squared error (RMSE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     return np.sqrt(mse(data, data_truth))
@@ -63,12 +54,10 @@ def rmse(data, data_truth):
 
 def smape(data, data_truth):
     """Computes symmetric mean absolute percentage error (SMAPE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     eps = 1e-16  # Need to make sure that denominator is not zero
@@ -79,16 +68,14 @@ def smape(data, data_truth):
 
 def mase(data, data_truth, insample, freq):
     """Calculates Mean Absolute Scaled Error (MASE)
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
     :param insample: time series in training set (n_timesteps, n_timeseries)
     :type insample: numpy array
-    :param freq: frequency or seasonality in the data (i.e. 12 for monthly series)
+    :param freq: frequency or seasonality in the data
     :type freq: integer
-
     """
 
     eps = 1e-16  # Need to make sure that denominator is not zero
@@ -99,8 +86,7 @@ def mase(data, data_truth, insample, freq):
 
 def msis(data_upper, data_lower, data_truth, insample, freq, alpha=0.05):
     """Computes Mean Scaled Interval Score (MSIS)
-
-    :param data_upper: Predicted upper bound of time series values 
+    :param data_upper: Predicted upper bound of time series values
     :type data_upper: numpy array
     :param data_lower: Predicted lower bound of time series values
     :type data_lower: numpy array
@@ -108,11 +94,10 @@ def msis(data_upper, data_lower, data_truth, insample, freq, alpha=0.05):
     :type data_truth: numpy array
     :param insample: time series in training set (n_timesteps, n_timeseries)
     :type insample: numpy array
-    :param freq: frequency or seasonality in the data (i.e. 12 for monthly series)
+    :param freq: frequency or seasonality in the data
     :type freq: integer
-    :param alpha: significance level (i.e. 95% confidence interval means alpha = 0.05) 
+    :param alpha: significance level (i.e. 95% confidence interval means alpha = 0.05)
     :type alpha: float
-
     """
 
     eps = 1e-16  # Need to make sure that denominator is not zero
@@ -131,18 +116,17 @@ def msis(data_upper, data_lower, data_truth, insample, freq, alpha=0.05):
 
 def coverage(data_upper, data_lower, data_truth):
     """Computes coverage rate of the prediction interval.
-
-    :param data_upper: Predicted upper bound of time series values 
+    :param data_upper: Predicted upper bound of time series values
     :type data_upper: numpy array
     :param data_lower: Predicted lower bound of time series values
     :type data_lower: numpy array
     :param data_truth: Ground truth time series values
     :type data_truth: numpy array
-
     """
 
     coverage_percentage = np.mean(
-        1.0 * (data_truth > data_lower) * (data_truth < data_upper))
+        1.0 * (data_truth > data_lower) * (data_truth < data_upper)
+    )
 
     return coverage_percentage * 100.0
 
@@ -151,7 +135,6 @@ def print_model_performance_mean_accuracy(data, data_truth,
                                           metric_list=['mape', 'smape'],
                                           freq=12, ts_train=None):
     """Print out model performance on prediction accuracy
-
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
@@ -162,7 +145,6 @@ def print_model_performance_mean_accuracy(data, data_truth,
     :type freq: integer
     :param ts_train: time series in training set (n_timesteps, n_timeseries)
     :type ts_train: numpy array
-
     """
 
     # check if metric_list is a list; if not, convert to a list.
@@ -195,7 +177,6 @@ def print_model_performance_uncertainty(pred_samples, data_truth,
                                         confidence_level=0.95,
                                         ts_train=None, verbose=True):
     """Print out model performance on uncertainty
-
     :param pred_samples: Prediction samples of time series (n_timesteps, n_timeseries)
     :type pred_samples: numpy array
     :param data_truth: Ground truth time series values (n_timesteps, n_timeseries)
@@ -210,7 +191,6 @@ def print_model_performance_uncertainty(pred_samples, data_truth,
     :type ts_train: numpy array
     :param verbose: print out the metric values
     :type verbose: boolean
-
     """
 
     if (not isinstance(metric_list, list)):
@@ -237,14 +217,14 @@ def print_model_performance_uncertainty(pred_samples, data_truth,
                 metric_value.append(val)
                 if verbose:
                     print('\t {0} at {1}% confidence level: {2:.1f}%'.format(
-                        name, int(p*100), val))
+                        name, int(p * 100), val))
             elif (i == 'coverage'):
                 name = 'Coverage Percentage'
                 val = coverage(pred_upper, pred_lower, data_truth)
                 metric_value.append(val)
                 if verbose:
                     print('\t {0} at {1}% confidence level: {2:.1f}%'.format(
-                        name, int(p*100), val))
+                        name, int(p * 100), val))
 
         metric_value_all_confidence_level.append(metric_value)
 
