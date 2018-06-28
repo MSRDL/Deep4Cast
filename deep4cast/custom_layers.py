@@ -39,7 +39,7 @@ class ConcreteDropout(Wrapper):
         if not self.layer.built:
             self.layer.build(input_shape)
             self.layer.built = True
-        # this is very weird, we must call super before we add new losses
+        # we must call super before we add new losses
         super(ConcreteDropout, self).build(input_shape)
 
         # initialise p

@@ -147,8 +147,9 @@ def coverage(data_upper, data_lower, data_truth):
     return coverage_percentage * 100.0
 
 
-def print_model_performance_mean_accuracy(data, data_truth, 
-    metric_list=['mape','smape'], freq=12, ts_train=None):
+def print_model_performance_mean_accuracy(data, data_truth,
+                                          metric_list=['mape', 'smape'],
+                                          freq=12, ts_train=None):
     """Print out model performance on prediction accuracy
 
     :param data: Predicted time series values (n_timesteps, n_timeseries)
@@ -189,8 +190,10 @@ def print_model_performance_mean_accuracy(data, data_truth,
     return metric_value
 
 
-def print_model_performance_uncertainty(pred_samples, data_truth, metric_list='coverage', 
-    freq=12, confidence_level=0.95, ts_train=None, verbose=True):
+def print_model_performance_uncertainty(pred_samples, data_truth,
+                                        metric_list='coverage', freq=12,
+                                        confidence_level=0.95,
+                                        ts_train=None, verbose=True):
     """Print out model performance on uncertainty
 
     :param pred_samples: Prediction samples of time series (n_timesteps, n_timeseries)
@@ -233,14 +236,16 @@ def print_model_performance_uncertainty(pred_samples, data_truth, metric_list='c
                            data_truth, ts_train, freq, alpha)
                 metric_value.append(val)
                 if verbose:
-                    print('\t {0} at {1}% confidence level: {2:.1f}%'.format(name, int(p*100), val))
+                    print('\t {0} at {1}% confidence level: {2:.1f}%'.format(
+                        name, int(p*100), val))
             elif (i == 'coverage'):
                 name = 'Coverage Percentage'
                 val = coverage(pred_upper, pred_lower, data_truth)
                 metric_value.append(val)
                 if verbose:
-                    print('\t {0} at {1}% confidence level: {2:.1f}%'.format(name, int(p*100), val))
-        
-        metric_value_all_confidence_level.append(metric_value)   
-         
+                    print('\t {0} at {1}% confidence level: {2:.1f}%'.format(
+                        name, int(p*100), val))
+
+        metric_value_all_confidence_level.append(metric_value)
+
     return metric_value_all_confidence_level
