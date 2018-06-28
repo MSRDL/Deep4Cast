@@ -115,6 +115,12 @@ class Forecaster():
         # Standardize the data before feeding it into the model
         X, y = self._normalize(X, y)
 
+        # Shuffle training sequences for validation set creation
+        inds = np.arange(len(X))
+        np.random.shuffle(inds)
+        X = X[inds]
+        y = y[inds]
+
         # Split into training and validation for early stopping
         n_val = int(len(X) * val_frac)
         X_train = X[:-n_val]
@@ -150,7 +156,7 @@ class Forecaster():
         self.history = self._model.fit(
             X_train,
             y_train,
-            shuffle=True,
+            shuffle=False,
             batch_size=int(self.batch_size),
             epochs=int(self.max_epochs),
             validation_data=(X_val, y_val),
@@ -186,50 +192,75 @@ class Forecaster():
         # Make sure the floats have the correct format
         data_pred = self._convert_to_float32(data_pred)
 
-        # The model expects input-output data pairs, so we create them from
-        # the time series arrary by windowing. Xs are 3D tensors
-        # of shape number of batch_size, timesteps, input_dim and
-        # ys are 2D tensors of lag * dimensionality.
-        X, y = self._sequentialize(data_pred)
+        means, stds, lower_quantiles, upper_quantiles = [], [], [], []
+        samples = []
+        for time_series in data_pred:
+            time_series = np.expand_dims(time_series, 0)
+            # The model expects input-output data pairs, so we create them from
+            # the time series arrary by windowing. Xs are 3D tensors
+            # of shape number of batch_size, timesteps, input_dim and
+            # ys are 2D tensors of lag * dimensionality.
+            X, y = self._sequentialize(time_series)
 
-        # Standardize the data before feeding it into the model
-        X, y = self._normalize(X, y, locked=True)
+            # Standardize the data before feeding it into the model
+            X, y = self._normalize(X, y, locked=True)
 
-        # If uncertainty is False, only do one sample prediction
-        if not self.dropout_rate:
-            n_samples = 1
+            # If uncertainty is False, only do one sample prediction
+            if not self.dropout_rate:
+                n_samples = 1
 
-        # Repeat the prediction n_samples times to generate samples from
-        # approximate posterior predictive distribution.
-        X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
+            # Repeat the prediction n_samples times to generate samples from
+            # approximate posterior predictive distribution.
+            block_size = len(X)
+            X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
 
-        # Make predictions for parameters of pdfs then sample from pdfs
-        raw_predictions = self._model.predict(X, self.batch_size)
-        raw_predictions = self._loss.sample(raw_predictions)
+            # Make predictions for parameters of pdfs then sample from pdfs
+            raw_predictions = self._model.predict(X, self.batch_size)
+            raw_predictions = self._loss.sample(raw_predictions)
 
-        # Take care of means and standard deviations
-        predictions = self._unnormalize_targets(raw_predictions)
+            # Take care of means and standard deviations
+            predictions = self._unnormalize_targets(raw_predictions)
 
-        # Calculate staticts on predictions
-        predictions = np.array(np.vsplit(predictions, n_samples))
-        mean = np.mean(predictions, axis=0)
-        median = None
-        std = None
-        lower_quantile = None
-        upper_quantile = None
+            # Calculate staticts on predictions
+            reshuffled_predictions = []
+            for i in range(n_samples):
+                block = predictions[i * block_size:(i + 1) * block_size]
+                reshuffled_predictions.append(block)
+            predictions = np.array(reshuffled_predictions)
 
-        if n_samples > 1:
-            median = np.median(predictions, axis=0)
-            std = np.std(predictions, axis=0)
-            lower_quantile = np.percentile(predictions, quantiles[0], axis=0)
-            upper_quantile = np.percentile(predictions, quantiles[1], axis=0)
+            # predictions = np.array(np.vsplit(predictions, n_samples))
+            mean = np.mean(predictions, axis=0)
+            std = None
+            lower_quantile = None
+            upper_quantile = None
 
-        return {'mean': mean,
-                'median': median,
-                'std': std,
-                'lower_quantile': lower_quantile,
-                'upper_quantile': upper_quantile,
-                'samples': predictions}
+            if n_samples > 1:
+                std = np.std(predictions, axis=0)
+                lower_quantile = np.percentile(
+                    predictions, quantiles[0], axis=0
+                )
+                upper_quantile = np.percentile(
+                    predictions, quantiles[1], axis=0
+                )
+
+            means.append(mean)
+            stds.append(std)
+            lower_quantiles.append(lower_quantile)
+            upper_quantiles.append(upper_quantile)
+            samples.append(predictions)
+
+        means = np.array(means)[:, 0, :, :]
+        stds = np.array(stds)[:, 0, :, :]
+        lower_quantiles = np.array(lower_quantiles)[:, 0, :, :]
+        upper_quantiles = np.array(upper_quantiles)[:, 0, :, :]
+        samples = np.array(samples)[:, :, 0, :]
+        samples = np.swapaxes(samples, 0, 1)
+
+        return {'mean': means,
+                'std': stds,
+                'lower_quantile': lower_quantiles,
+                'upper_quantile': upper_quantiles,
+                'samples': samples}
 
     @staticmethod
     def _build_topology(topology):
