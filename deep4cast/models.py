@@ -125,7 +125,10 @@ class SharedLayerModel(Model):
             layer_id = dropout_id
 
         layer_cls = keras.layers.Dense
-        params = {'units': np.prod(self._output_shape)}
+        params = {
+            'units': np.prod(self._output_shape),
+            'kernel_initializer': 'glorot_normal'
+        }
         layers['_dense'] = layer_cls(**params)(layers[layer_id])
 
         layer_cls = keras.layers.Reshape
