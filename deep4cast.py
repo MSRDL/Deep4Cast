@@ -12,7 +12,7 @@ import numpy as np
 from pandas import read_table
 
 from deep4cast.forecasters import Forecaster
-from deep4cast.metrics import adjust_for_horizon, mape
+from deep4cast.metrics import mape
 
 
 def main(args):
@@ -51,7 +51,7 @@ def main(args):
     forecaster.fit(ts_train)
 
     # Print errors to screen using a specified metric function
-    metric = adjust_for_horizon(mape)
+    metric = mape
     ts_train_pred = forecaster.predict(
         ts_train, n_samples=args.n_samples
     )['mean']

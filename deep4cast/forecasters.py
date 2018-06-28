@@ -197,9 +197,12 @@ class Forecaster():
         mean_prediction = np.mean(samples, axis=0)
 
         # Turn samples into quantiles for easier display later.
-        lower_quantile = np.nanpercentile(samples, quantiles[0], axis=0) if self.uncertainty else None
-        upper_quantile = np.nanpercentile(samples, quantiles[1], axis=0) if self.uncertainty else None
-        median_prediction = np.nanpercentile(samples, 50, axis=0) if self.uncertainty else None
+        lower_quantile = np.nanpercentile(
+            samples, quantiles[0], axis=0) if self.uncertainty else None
+        upper_quantile = np.nanpercentile(
+            samples, quantiles[1], axis=0) if self.uncertainty else None
+        median_prediction = np.nanpercentile(
+            samples, 50, axis=0) if self.uncertainty else None
 
         return {'mean': mean_prediction,
                 'median': median_prediction,

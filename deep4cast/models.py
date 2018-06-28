@@ -41,6 +41,7 @@ class SharedLayerModel(Model):
                  output_shape,
                  topology,
                  uncertainty=False,
+                 concreteDropout=False,
                  dropout_rate=0.1):
         """Initialize attributes."""
         self._input_shape = input_shape
@@ -48,6 +49,7 @@ class SharedLayerModel(Model):
         self._topology = topology
         self._rnd_init = 'glorot_normal'
         self._uncertainty = uncertainty
+        self._concreteDropout = concreteDropout
         self._dropout_rate = dropout_rate
 
         # Initialize super class with custom layers
@@ -102,9 +104,14 @@ class SharedLayerModel(Model):
                     # Networks should be used, we add Dropout after each layer,
                     # even at test time.
                     dropout_id = next_id + '_' + layer_id + '_dropout'
-                    layers[dropout_id] = custom_layers.MCDropout(rate)(
-                        layers[next_id]
-                    )
+                    if self._concreteDropout:
+                        layers[dropout_id] = custom_layers.ConcreteDropout(
+                            layers[next_id]
+                        )
+                    else:
+                        layers[dropout_id] = custom_layers.MCDropout(rate)(
+                            layers[next_id]
+                        )
                     next_id = dropout_id
 
                 parents.append(layers[next_id])
@@ -121,9 +128,14 @@ class SharedLayerModel(Model):
         # forecasting.
         if self._uncertainty:
             dropout_id = layer_id + '_dense_dropout'
-            layers[dropout_id] = custom_layers.MCDropout(rate)(
-                layers[layer_id]
-            )
+            if self._concreteDropout:
+                layers[dropout_id] = custom_layers.ConcreteDropout(
+                    layers[layer_id]
+                )
+            else:
+                layers[dropout_id] = custom_layers.MCDropout(rate)(
+                    layers[layer_id]
+                )
             layer_id = dropout_id
 
         layer_cls = keras.layers.Dense
