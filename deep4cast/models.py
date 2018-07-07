@@ -45,8 +45,8 @@ class SharedLayerModel(Model):
         self._topology = topology
         self._rnd_init = 'glorot_normal'
         self._dropout_rate = dropout_rate
-        #self._dropout_layer = custom_layers.ConcreteDropout
-        self._dropout_layer = custom_layers.MCDropout
+        self._dropout_layer = custom_layers.ConcreteDropout
+        #self._dropout_layer = custom_layers.MCDropout
 
         # Initialize super class with custom layers
         inputs, outputs = self._build_layers()
@@ -100,7 +100,7 @@ class SharedLayerModel(Model):
                     # Networks should be used, we add Dropout after each layer,
                     # even at test time.
                     dropout_id = next_id + '_' + layer_id + '_dropout'
-                    layers[dropout_id] = self._dropout_layer(rate)(
+                    layers[dropout_id] = self._dropout_layer()(
                         layers[next_id]
                     )
                     next_id = dropout_id
@@ -119,7 +119,7 @@ class SharedLayerModel(Model):
         # forecasting.
         if self._dropout_rate:
             dropout_id = layer_id + '_dense_dropout'
-            layers[dropout_id] = self._dropout_layer(rate)(
+            layers[dropout_id] = self._dropout_layer()(
                 layers[layer_id]
             )
             layer_id = dropout_id

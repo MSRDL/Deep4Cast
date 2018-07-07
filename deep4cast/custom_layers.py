@@ -1,11 +1,92 @@
 # -*- coding: utf-8 -*-
 """Custom layers module."""
+import numpy as np
 
 from keras.layers import Layer, Dropout
 from keras import backend as K
 from keras.legacy import interfaces
 from keras import initializers
 from keras.engine import InputSpec
+
+
+class ConcreteDropout(Layer):
+    @interfaces.legacy_dropout_support
+    def __init__(self, regularizer=1e-5, init_range=(0.1, 0.3), **kwargs):
+        super(ConcreteDropout, self).__init__(**kwargs)
+        self.regularizer = regularizer
+        self.init_range = init_range
+        self.supports_masking = True
+
+        # Dropout regularizer parameters
+        self.p_logit = None
+        self.p = None
+        self.init_min = np.log(init_range[0]) - np.log(1. - init_range[0])
+        self.init_max = np.log(init_range[1]) - np.log(1. - init_range[1])
+
+    def build(self, input_shape=None):
+        self.input_spec = InputSpec(shape=input_shape)
+
+        # This is very weird. We must call super before we add new losses
+        # super(ConcreteDropout, self).build(input_shape)
+
+        # Initialize the dropout probability
+        self.p_logit = self.add_weight(
+            name='p_logit',
+            shape=(1,),
+            initializer=initializers.RandomUniform(
+                self.init_min,
+                self.init_max
+            ),
+            trainable=True
+        )
+        self.p = K.sigmoid(self.p_logit[0])
+
+        # Initialize the dropout regularizer
+        input_dim = np.prod(input_shape[1:])  # Drop only last two dims
+        regularizer = self.p * K.log(self.p)
+        regularizer += (1. - self.p) * K.log(1. - self.p)
+        regularizer *= self.regularizer * input_dim
+        self.add_loss(regularizer)
+
+    def concrete_dropout(self, inputs):
+        '''
+        Applies approx. dropping to inputs such that gradients can be
+        propagated.
+
+        '''
+        # Parameters for concrete distribution
+        eps = K.cast_to_floatx(K.epsilon())
+        temp = 0.1
+
+        # Use concrete distribution to calculate approx. dropout mask
+        unif_noise = K.random_uniform(shape=K.shape(inputs))
+        drop_prob = (
+            K.log(self.p + eps) -
+            K.log(1. - self.p + eps) +
+            K.log(unif_noise + eps) -
+            K.log(1. - unif_noise + eps)
+        )
+        drop_prob = K.sigmoid(drop_prob / temp)
+        random_tensor = 1. - drop_prob
+        retain_prob = 1. - self.p
+
+        # Approximately drop inputs
+        inputs *= random_tensor
+        inputs /= retain_prob
+
+        return inputs
+
+    def call(self, inputs, training=None):
+        return self.concrete_dropout(inputs)
+
+    def get_config(self):
+        config = {'regularizer': self.regularizer,
+                  'init_range': self.init_range}
+        base_config = super(ConcreteDropout, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 class MCDropout(Dropout):
