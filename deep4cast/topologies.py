@@ -5,167 +5,85 @@ This module provides access to neural network topologies that can be used
 insdide the forecaster module.
 
 """
+import numpy as np
+import keras.layers
+from keras.models import Model
 
-_CNN = [
-    {
-        'meta': {
-            'layer_type': 'Conv1D',
-            'layer_id': 'conv1',
-            'parent_ids': ['input']
-        },
-        'params': {
-            'filters': 256,
-            'kernel_size': 6,
-            'activation': 'elu'
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'Conv1D',
-            'layer_id': 'conv2',
-            'parent_ids': ['conv1']
-        },
-        'params': {
-            'filters': 128,
-            'kernel_size': 5,
-            'activation': 'elu'
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'Conv1D',
-            'layer_id': 'conv3',
-            'parent_ids': ['conv2']
-        },
-        'params': {
-            'filters': 64,
-            'kernel_size': 4,
-            'activation': 'elu'
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'Flatten',
-            'layer_id': 'flat1',
-            'parent_ids': ['conv3']
-        },
-        'params': {}
-    },
-    {
-        'meta': {
-            'layer_type': 'Dense',
-            'layer_id': 'dense1',
-            'parent_ids': ['flat1']
-        },
-        'params': {
-            'units': 128,
-            'activation': 'elu'
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'Dense',
-            'layer_id': 'dense2',
-            'parent_ids': ['dense1']
-        },
-        'params': {
-            'units': 256,
-            'activation': 'elu'
-        }
-    }
-]
-
-_GRU = [
-    {
-        'meta': {
-            'layer_type': 'GRU',
-            'layer_id': 'gru1',
-            'parent_ids': ['input']
-        },
-        'params': {
-            'units': 128,
-            'return_sequences': False
-        }
-    }
-]
-
-_LSTM = [
-    {
-        'meta': {
-            'layer_type': 'LSTM',
-            'layer_id': 'lstm1',
-            'parent_ids': ['input']
-        },
-        'params': {
-            'units': 128,
-            'return_sequences': False
-        }
-    }
-]
-
-_LSTNET = [
-    {
-        'meta': {
-            'layer_type': 'Conv1D',
-            'layer_id': 'conv1',
-            'parent_ids': ['input']
-        },
-        'params': {
-            'filters': 128, 
-            'kernel_size': 5
-        }
-    },    
-    {
-        'meta': {
-            'layer_type': 'GRU',
-            'layer_id': 'gru1',
-            'parent_ids': ['conv1']
-        },
-        'params': {
-            'units': 128, 
-            'return_sequences': True
-        }
-    },
-    {
-        'meta': {
-            'layer_type': 'TemporalAttention',
-            'layer_id': 'att1',
-            'parent_ids': ['gru1']
-        },
-        'params': {}
-    },
-    {
-        'meta': {
-            'layer_type': 'AutoRegression',
-            'layer_id': 'ar1',
-            'parent_ids': ['input']
-        },
-        'params': {}
-    },
-    {
-        'meta': {
-            'layer_type': 'Concatenate',
-            'layer_id': 'con1',
-            'parent_ids': ['ar1', 'att1']
-        },
-        'params': {}
-    }
-]
+from . import custom_layers
 
 
-def get_topology(type):
-    """General forecaster class for forecasting time series.
-    :param type: Neural network topolgy kind.
-    :type type: list
+class WaveNet(Model):
 
-    """
-    if type.lower() == 'cnn':
-        return _CNN
-    elif type.lower() == 'gru':
-        return _GRU
-    elif type.lower() == 'lstm':
-        return _LSTM
-    elif type.lower() == 'lstnet':
-        return _LSTNET
-    else:
-        raise ValueError('Unknown topology kind.')
+    def __init__(self, num_filters=32, num_layers=3, activation='relu'):
+        self.num_filters = num_filters
+        self.num_layers = num_layers
+        self.activation = activation
+
+    def build(self, input_shape, output_shape, targets=None):
+        inputs, outputs = self.build_input(input_shape, targets)
+        for power in self.num_layers:
+            outputs = self.build_wavenet_block(outputs, power)
+        outputs = self.build_output(outputs, output_shape, targets)
+        
+        super(WaveNet, self).__init__(inputs, outputs)
+
+    def build_input(self, input_shape, targets=None):
+        print(input_shape)
+        inputs = keras.layers.Input(shape=self.input_shape)
+        outputs = inputs
+        dilated_conv = keras.layers.Conv1D(
+            filters=self.num_filters,
+            kernel_size=2,
+            strides=1,
+            padding='causal',
+            dilation_rate=1,
+            bias=True,
+            name='Dilated_Conv1D_0',
+            activation=self.activation
+        )(outputs)
+
+        skip = keras.layers.Conv1D(
+            filters=self.num_filters,
+            kernel_size=1,
+            border_mode='same',
+            bias=True
+        )(outputs)
+        outputs = keras.layers.Merge(mode='sum')([dilated_conv, skip])
+        outputs = custom_layers.ConcreteDropout(outputs)
+
+        return inputs, outputs
+
+    def build_output(self, x, output_shape):
+        outputs = keras.layers.Conv1D(
+            filters=self.num_filters,
+            kernel_size=1,
+            border_mode='same',
+            bias=True
+        )(x)
+        outputs = custom_layers.ConcreteDropout(outputs)
+        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
+        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
+
+        return outputs
+
+    def build_wavenet_block(self, x, power):
+        x_in = x
+        dilated_conv = keras.layers.Conv1D(
+            filters=self.num_filters,
+            kernel_size=2,
+            strides=1,
+            padding='causal',
+            dilation_rate=2 ** power,
+            bias=True,
+            name='Dilated_Conv1D_%d' % (2 ** power),
+            activation=self.activation
+        )(x)
+        outputs = keras.layers.Merge(mode='sum')([dilated_conv, x_in])
+        outputs = custom_layers.ConcreteDropout(outputs)
+
+        return outputs
+
+    def compute_receptive_field_(dilation_depth, nb_stacks):
+        receptive_field = nb_stacks * (2 ** dilation_depth * 2) - (nb_stacks - 1)
+        receptive_field_ms = (receptive_field * 1000) / desired_sample_rate
+    return receptive_field, receptive_field_ms

@@ -7,12 +7,11 @@ from inspect import getargspec
 
 import time
 import numpy as np
+import pandas as pd
 import keras.optimizers
 from keras.callbacks import EarlyStopping
 
-from . import custom_losses, metrics
-from .models import SharedLayerModel
-from .topologies import get_topology
+from . import custom_losses, custom_metrics
 
 
 class Forecaster():
@@ -32,22 +31,18 @@ class Forecaster():
     """
 
     def __init__(self,
-                 topology,
+                 model,
                  lag: int,
                  horizon: int,
                  loss='mse',
                  optimizer='sgd',
                  batch_size=16,
                  max_epochs=1000,
-                 dropout_rate=None,
                  **kwargs):
         """Initialize properties."""
 
         # Attributes related to neural network model
-        self.model_class = SharedLayerModel
-        self.topology = self._build_topology(topology)
-        self.dropout_rate = dropout_rate
-        self._model = None
+        self._model = model
 
         # Attributes related to model training
         self.optimizer = optimizer
@@ -98,7 +93,7 @@ class Forecaster():
         self.targets = targets
 
         # Check if data doesn't contains NaNs and such
-        self._check_data_format(data)
+        # self._check_data_format(data)
 
         # Make sure the floats have the correct format
         data_train = self._convert_to_float32(data)
@@ -132,16 +127,18 @@ class Forecaster():
         # Prepare model output shape based on loss function
         # This is to handle loss functions that requires multiple parameters
         # such as the heteroscedsatic Gaussian
-        self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
+        if isinstance(self.loss, str):
+            self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
+        else:
+            self._loss = self.loss
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
 
         # Set up the model based on internal model class
-        self._model = self.model_class(
+        self._model.build(
             input_shape=X.shape[1:],
             output_shape=output_shape,
-            topology=self.topology,
-            dropout_rate=self.dropout_rate
+            targets=self.targets
         )
 
         # Keras needs to compile the computational graph before fitting
@@ -151,17 +148,25 @@ class Forecaster():
         )
 
         # Set up early stopping callback
-        es = EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)
+        #es = EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)
 
         # Print the model topology and parameters before fitting
+        # self.history = self._model.fit(
+        #     X_train,
+        #     y_train,
+        #     shuffle=False,
+        #     batch_size=int(self.batch_size),
+        #     epochs=int(self.max_epochs),
+        #     validation_data=(X_val, y_val),
+        #     callbacks=[es],
+        #     verbose=verbose
+        # )
         self.history = self._model.fit(
             X_train,
             y_train,
-            shuffle=False,
+            shuffle=True,
             batch_size=int(self.batch_size),
             epochs=int(self.max_epochs),
-            validation_data=(X_val, y_val),
-            callbacks=[es],
             verbose=verbose
         )
 
@@ -182,7 +187,7 @@ class Forecaster():
         """
         # Check if model is fitted and data doesn't contains NaNs and such
         self._check_is_fitted()
-        self._check_data_format(data)
+        # self._check_data_format(data)
 
         # Now only use the last windows from the input sequences
         data_pred = []
@@ -257,14 +262,6 @@ class Forecaster():
                 'lower_quantile': lower_quantiles,
                 'upper_quantile': upper_quantiles,
                 'samples': samples}
-
-    @staticmethod
-    def _build_topology(topology):
-        """Return topology depending on user input (str or list)."""
-        if isinstance(topology, str):
-            return get_topology(topology)
-        if isinstance(topology, list):
-            return topology
 
     @staticmethod
     def _convert_to_float32(array):
@@ -423,18 +420,16 @@ class Forecaster():
                 setattr(self._optimizer, key, value)
 
 
-class TemporalCrossValidator():
+class CrossValidator():
     """Temporal cross-validator class.
 
     This class performs temporal (causal) cross-validation similar to the
-    approach in  https://robjhyndman.com/papers/cv-wp.pdf.
+    approach in https://robjhyndman.com/papers/cv-wp.pdf.
 
     :param forecaster: Forecaster.
     :type forecaster: A forecaster class
-    :param data: Data set to used for cross-validation.
-    :type data: numpy array
-    :param train_frac: Fraction of data to be used for training per fold.
-    :type train_frac: float
+    :param val_frac: Fraction of data to be used for validation per fold.
+    :type val_frac: float
     :param n_folds: Number of temporal folds.
     :type n_folds: int
     :param loss: The kind of loss used for evaluating the forecaster on folds.
@@ -444,90 +439,148 @@ class TemporalCrossValidator():
 
     def __init__(self,
                  forecaster: Forecaster,
-                 n_folds=5,
-                 loss='mse'):
+                 val_fraction=0.1,
+                 n_folds=2,
+                 loss='rmse',
+                 metrics=['mape', 'smape']):
         """Initialize properties."""
         self.forecaster = forecaster
+        self.val_fraction = val_fraction
         self.n_folds = n_folds
         self.loss = loss
+        self.metrics = metrics
+        self.predictions_mean = None
+        self.predictions_samples = None
 
-    def evaluate(self, data, targets=None, patience=10, verbose=True):
-        """Evaluate forecaster with forecaster parameters params.
+        # Training fraction depends on number of folds and test fraction
+        print("Training fraction is {}.".format(1 - val_fraction * n_folds))
 
-        :param params: Dictionary that contains parameters for forecaster.
-        :type params: dict
-
-        """
-
-        # Instantiate the appropriate loss metric and get the folds for
-        # evaluating the forecaster. We want to use a generator here to save
-        # some space.
+    def evaluate(self, data, targets=None, n_samples=100, verbose=True):
+        """Evaluate forecaster."""
         folds = self._generate_folds(data)
+        lag = self.forecaster.lag
+        horizon = self.forecaster.horizon
 
-        losses = []
-        for i, (data_train, data_test) in enumerate(folds):
-            # Quietly fit the forecaster
+        # Set up the metrics dictionary also containing the main loss
+        percentiles = [1, 5, 25, 50, 75, 95, 99]
+        percentile_names = ['p' + str(x) for x in percentiles]
+        metrics = pd.DataFrame(
+            columns=[self.loss, ] + self.metrics + percentile_names
+        )
+
+        for i, (data_train, data_val) in enumerate(folds):
+            # Quietly fit the forecaster to this fold's training set
             forecaster = self.forecaster
             t0 = time.time()
             forecaster.fit(
                 data_train,
                 targets=targets,
-                patience=patience,
-                verbose=0
+                patience=1e6,  # training only using max_epochs
+                val_frac=1e-2,  # no need for validation fraction
+                verbose=1  # Fit in silence
             )
-            duration = time.time() - t0
+            duration = round(time.time() - t0)
 
-            # Calculate forecaster performance
-            predictions = forecaster.predict(data_train)
-            loss = getattr(metrics, self.loss)
-            loss = round(metrics.mse(
-                predictions['mean'], data_test[:, :, targets]),
-                2
+            # Depending on the horizon, we make multiple predictions on the
+            # test set and need to create those input output pairs
+            j = 0
+            inputs = []
+            while (j + 1) * horizon + lag <= data_val.shape[1]:
+                tmp = []
+                for time_series in data_val:
+                    tmp.append(time_series[j * horizon:j * horizon + lag, :])
+                inputs.append(np.array(tmp))
+                j += 1
+
+            # Time series values to be forecasted
+            n_horizon = (data_val.shape[1] - lag) // horizon
+            if targets:
+                data_pred = data_val[:, lag:lag + n_horizon * horizon, targets]
+            else:
+                data_pred = data_val[:, lag:lag + n_horizon * horizon, :]
+
+
+            # Make predictions for each of the input chunks
+            predictions_mean, predictions_samples = [], []
+            for input_data in inputs:
+                prediction = forecaster.predict(
+                    input_data,
+                    n_samples=n_samples
+                )
+                predictions_mean.append(prediction['mean'])
+                predictions_samples.append(prediction['samples'])
+            predictions_mean = np.concatenate(predictions_mean, axis=1)
+            predictions_samples = np.concatenate(predictions_samples, axis=2)
+
+            # Update the loss for this fold
+            metrics_append = {}
+            metrics_append[self.loss] = getattr(custom_metrics, self.loss)(
+                predictions_mean,
+                data_pred
             )
-            losses.append(loss)
 
-            # Report progress if requested
-            if verbose:
-                print(
-                    'Fold {}: Test {}:{}'.format(
-                        i,
-                        self.loss,
-                        loss
-                    )
+            # Update other performance metrics for this fold
+            for metric in self.metrics:
+                func = getattr(custom_metrics, metric)
+                metrics_append[metric] = func(
+                    predictions_mean,
+                    data_pred
+                )
+            metrics = metrics.append(metrics_append, ignore_index=True)
+
+            # Update coverage metrics for this fold
+            for percentile in percentiles:
+                val_perc = np.percentile(
+                    predictions_samples,
+                    percentile,
+                    axis=0
+                )
+                metrics['p' + str(percentile)] = custom_metrics.coverage(
+                    val_perc,
+                    data_pred
                 )
 
-        # We only need some loss statistics. We use the name 'loss' in this
-        # dictionary to denote the main quantity of interest, because
-        # hyperopt expect a dictionary with a 'loss' key.
-        scores = {
-            'loss': np.mean(losses),
-            'loss_std': np.std(losses),
-            'loss_min': np.min(losses),
-            'loss_max': np.max(losses),
-            'training_time': duration
-        }
+            # Update the user on the validation status
+            print("Validation fold {} took {} s.".format(i, duration))
 
-        return scores
+        # Clean up the metrics table
+        metrics.index.name = 'fold'
+        metrics = metrics.round(2)
+
+        # Store predictions in case they are needed for plotting
+        self.predictions_mean = predictions_mean
+        self.predictions_samples = predictions_samples
+
+        return metrics
 
     def _generate_folds(self, data):
         """Yield a data fold."""
-        horizon = self.forecaster.horizon
-        train_length = data.shape[1] - horizon * self.n_folds
+        lag = self.forecaster.lag
+
+        # Find the maximum length of all example time series in the dataset.
+        data_length = []
+        for time_series in data:
+            data_length.append(len(time_series))
+        data_length = max(data_length)
+        test_length = int(data_length * self.val_fraction)
+        train_length = data_length - self.n_folds * test_length
 
         # Loop over number of folds to generate folds for cross-validation
-        # but make sure that the train and test part of the time series
-        # dataset overlap appropriately to account for the lag window.
+        # but make sure that the folds do not overlap.
         for i in range(self.n_folds):
-            data_train, data_test = [], []
+            data_train, data_val = [], []
             for time_series in data:
-                data_train.append(
-                    time_series[i * horizon: train_length + i * horizon, :]
+                train_ind = np.arange(
+                    -(i + 1) * test_length - train_length,
+                    -(i + 1) * test_length
                 )
-                data_test.append(
-                    time_series[train_length + i *
-                                horizon: train_length + (i + 1) * horizon, :]
+                test_ind = np.arange(
+                    -(i + 1) * test_length - lag,
+                    -i * test_length
                 )
+                data_train.append(time_series[train_ind, :])
+                data_val.append(time_series[test_ind, :])
             data_train = np.array(data_train)
-            data_test = np.array(data_test)
+            data_val = np.array(data_val)
 
-            yield (data_train, data_test)
+            yield data_train, data_val

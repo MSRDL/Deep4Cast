@@ -2,14 +2,16 @@
 """Custom layers module."""
 import numpy as np
 
-from keras.layers import Layer, Dropout
+from keras.layers import Layer, Dropout, Conv1D, Merge
 from keras import backend as K
 from keras.legacy import interfaces
 from keras import initializers
 from keras.engine import InputSpec
+from keras.regularizers import l2
 
 
 class ConcreteDropout(Layer):
+
     @interfaces.legacy_dropout_support
     def __init__(self, regularizer=1e-5, init_range=(0.1, 0.3), **kwargs):
         super(ConcreteDropout, self).__init__(**kwargs)
@@ -132,7 +134,7 @@ class MCDropout(Dropout):
         return inputs
 
 
-class TemporalAttention(Layer):
+class Attention(Layer):
     """Applies simple static attention mechanism to tensor of shape
     (batch_size, time_steps, n_units). This can be applied for long-term
     prediction tasks by finding the the past state vectors of LSTMs/GRUs that
@@ -159,7 +161,7 @@ class TemporalAttention(Layer):
             initializer='uniform',
             trainable=True
         )
-        super(TemporalAttention, self).build(input_shape)
+        super(Attention, self).build(input_shape)
 
     def call(self, x):
         # Normalize input for calculating cosine distance
