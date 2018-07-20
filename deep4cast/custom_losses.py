@@ -114,7 +114,8 @@ class heteroscedastic_gaussian():
 
         """
         if n_samples > 1:
-            size = [n_samples] + list(mean.shape)
+            size = list(mean.shape)
+            size[0] *= n_samples
         else:
             size = mean.shape
 
@@ -185,7 +186,8 @@ class heteroscedastic_t():
 
         """
         if n_samples > 1:
-            size = [n_samples] + list(mean.shape)
+            size = list(mean.shape)
+            size[0] *= n_samples
         else:
             size = mean.shape
 

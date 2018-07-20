@@ -180,19 +180,18 @@ class Forecaster():
 
             # Make predictions for parameters of pdfs then sample from pdfs
             raw_predictions = self.model.predict(X, self.batch_size)
-            raw_predictions = self._loss.sample(raw_predictions)
+            raw_predictions = self._loss.sample(raw_predictions, n_samples)
 
             # Take care of means and standard deviations
             predictions = self._unnormalize_targets(raw_predictions)
 
             # Calculate staticts on predictions
             reshuffled_predictions = []
-            for i in range(n_samples):
+            for i in range(n_samples**2):
                 block = predictions[i * block_size:(i + 1) * block_size]
                 reshuffled_predictions.append(block)
             predictions = np.array(reshuffled_predictions)
 
-            # predictions = np.array(np.vsplit(predictions, n_samples))
             mean = np.mean(predictions, axis=0)
             std = np.std(predictions, axis=0)
             lower_quantile = np.percentile(
