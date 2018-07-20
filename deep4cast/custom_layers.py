@@ -2,13 +2,11 @@
 """Custom layers module."""
 import numpy as np
 
-from keras.layers import Layer, Dropout, Conv1D, Merge
+from keras.layers import Layer, Dropout
 from keras import backend as K
 from keras.legacy import interfaces
 from keras import initializers
 from keras.engine import InputSpec
-from keras.regularizers import l2
-
 
 class ConcreteDropout(Layer):
 
@@ -145,7 +143,7 @@ class Attention(Layer):
     """
 
     def __init__(self, **kwargs):
-        super(TemporalAttention, self).__init__(**kwargs)
+        super(Attention, self).__init__(**kwargs)
 
     def build(self, input_shape):
         # Create a trainable kernel and bias for output.

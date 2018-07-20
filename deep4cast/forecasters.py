@@ -21,43 +21,46 @@ class Forecaster():
     :param optimizer: Neural network optimizer.
     :type optimizer: string
     :param topology: Neural network topology.
-    :type topology: list
+    :type topology: keras.model
     :param batch_size: Training batch size.
     :type batch_size: int
-    :param epochs: Number of training epochs.
+    :param epochs: Maximum number of training epochs.
     :type epochs: int
-    :param dropout_rate: Probability of dropping a node during Dropout.
-    :type dropout_rate: float
+    :param val_frac: Fraction of data points to set aside for validation.
+    :type val_frac: float
+    :param patience: number of epochs to wait before early stopping,
+    :type patience: float
+
     """
 
     def __init__(self,
-                 model,
-                 lag: int,
-                 horizon: int,
-                 loss='mse',
-                 optimizer='sgd',
-                 batch_size=16,
-                 max_epochs=1000,
+                 topology,
+                 lag,
+                 horizon,
+                 loss='heteroscedastic_gaussian',
+                 optimizer='nadam',
+                 batch_size=32,
+                 epochs=100,
                  **kwargs):
         """Initialize properties."""
 
-        # Attributes related to neural network model
-        self._model = model
+        # Neural network model attributes
+        self.model = topology
 
-        # Attributes related to model training
+        # Model training attributes
         self.optimizer = optimizer
         self.set_optimizer_args(kwargs)
 
         self.lag = lag
         self.horizon = horizon
         self.batch_size = batch_size
-        self.max_epochs = max_epochs
+        self.epochs = epochs
         self.loss = loss
-        self.history = None
         self._loss = None
+        self.history = None
         self.targets = None
 
-        # Attributes related to input data (these are set during fitting)
+        # Data attributes (these are set during fitting)
         self._features_means = None
         self._features_scales = None
         self._targets_means = None
@@ -67,33 +70,20 @@ class Forecaster():
         self._is_fitted = False
         self._is_normalized = False
 
-    def fit(self,
-            data,
-            targets=None,
-            normalize=False,
-            val_frac=0.1,
-            patience=5,
-            verbose=0):
+    def fit(self, data, targets=None, verbose=0):
         """Fit model to data.
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
-        :param targets: Dict that contains the indices of targets and
-        covariates.
-        :type targets: dict
-        :param val_frac: Fraction of data points to set aside for validation.
-        :type val_frac: float
-        :param patience: number of epochs to wait before early stopping,
-        :type patience: float
+        :param targets: List of covariates indices.
+        :type targets: list
         :param verbose: Verbosity mode. 0 = silent, 1 = progress bar,
             2 = one line per epoch.
         :type verbose: int
         """
-        # Store a dictionary of lists that contain the indicies of
-        # target variables, dynamic, and static covariates.
         self.targets = targets
 
         # Check if data doesn't contains NaNs and such
-        # self._check_data_format(data)
+        self._check_data_format(data)
 
         # Make sure the floats have the correct format
         data_train = self._convert_to_float32(data)
@@ -102,79 +92,52 @@ class Forecaster():
         # the time series arrary by windowing. Xs are 3D tensors
         # of shape number of batch_size, timesteps, input_dim and
         # ys are 2D tensors of lag * dimensionality.
-        X, y = self._sequentialize(data_train)
+        X_train, y_train = self._sequentialize(data_train)
 
-        # Remove NaN's from windowing
-        X = X[~np.isnan(y)[:, 0, 0]]
-        y = y[~np.isnan(y)[:, 0, 0]]
+        # Remove NaN's that occur during windowing
+        X_train = X_train[~np.isnan(y_train)[:, 0, 0]]
+        y_train = y_train[~np.isnan(y_train)[:, 0, 0]]
+        
+        # Normalize the data before feeding it into the model
+        X_train, y_train = self._normalize(X_train, y_train)
 
-        # Standardize the data before feeding it into the model
-        X, y = self._normalize(X, y)
-
-        # Shuffle training sequences for validation set creation
-        inds = np.arange(len(X))
-        np.random.shuffle(inds)
-        X = X[inds]
-        y = y[inds]
-
-        # Split into training and validation for early stopping
-        n_val = int(len(X) * val_frac)
-        X_train = X[:-n_val]
-        y_train = y[:-n_val]
-        X_val = X[-n_val:]
-        y_val = y[-n_val:]
-
-        # Prepare model output shape based on loss function
-        # This is to handle loss functions that requires multiple parameters
-        # such as the heteroscedsatic Gaussian
+        # Prepare model output shape based on loss function type to handle
+        # loss functions that requires multiple parameters such as the #
+        # heteroscedsatic Gaussian
         if isinstance(self.loss, str):
-            self._loss = getattr(custom_losses, self.loss)(n_dim=y.shape[2])
+            self._loss = getattr(custom_losses, self.loss)(
+                n_dim=y_train.shape[2]
+            )
         else:
             self._loss = self.loss
         loss_dim_factor = self._loss.dim_factor
-        output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
+        output_shape = (y_train.shape[1], y_train.shape[2] * loss_dim_factor)
 
-        # Set up the model based on internal model class
-        self._model.build(
-            input_shape=X.shape[1:],
-            output_shape=output_shape,
-            targets=self.targets
-        )
+        if not self._is_fitted:
+            # Set up the model based on internal model class
+            self.model.build_layers(
+                input_shape=X_train.shape[1:],
+                output_shape=output_shape
+            )
 
-        # Keras needs to compile the computational graph before fitting
-        self._model.compile(
-            loss=self._loss,
-            optimizer=self._optimizer
-        )
+            # Keras needs to compile the computational graph before fitting
+            self.model.compile(
+                loss=self._loss,
+                optimizer=self._optimizer
+            )
 
-        # Set up early stopping callback
-        #es = EarlyStopping(monitor='val_loss', min_delta=0, patience=patience)
-
-        # Print the model topology and parameters before fitting
-        # self.history = self._model.fit(
-        #     X_train,
-        #     y_train,
-        #     shuffle=False,
-        #     batch_size=int(self.batch_size),
-        #     epochs=int(self.max_epochs),
-        #     validation_data=(X_val, y_val),
-        #     callbacks=[es],
-        #     verbose=verbose
-        # )
-        self.history = self._model.fit(
+        # Fit model to data
+        self.history = self.model.fit(
             X_train,
             y_train,
             shuffle=True,
             batch_size=int(self.batch_size),
-            epochs=int(self.max_epochs),
+            epochs=int(self.epochs),
             verbose=verbose
         )
 
         # Change state to fitted so that other methods work correctly
         self._is_fitted = True
-
-        # Store the model summary
-        self.summary = self._model.summary
 
     def predict(self, data, n_samples=100, quantiles=(5, 95)):
         """Generate predictions for input time series numpy array.
@@ -187,9 +150,8 @@ class Forecaster():
         """
         # Check if model is fitted and data doesn't contains NaNs and such
         self._check_is_fitted()
-        # self._check_data_format(data)
 
-        # Now only use the last windows from the input sequences
+        # Now only use the last window from the input sequences
         data_pred = []
         for time_series in data:
             data_pred.append(time_series[-self.lag:, :])
@@ -211,17 +173,13 @@ class Forecaster():
             # Standardize the data before feeding it into the model
             X, y = self._normalize(X, y, locked=True)
 
-            # If uncertainty is False, only do one sample prediction
-            if not self.dropout_rate:
-                n_samples = 1
-
             # Repeat the prediction n_samples times to generate samples from
             # approximate posterior predictive distribution.
             block_size = len(X)
             X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
 
             # Make predictions for parameters of pdfs then sample from pdfs
-            raw_predictions = self._model.predict(X, self.batch_size)
+            raw_predictions = self.model.predict(X, self.batch_size)
             raw_predictions = self._loss.sample(raw_predictions)
 
             # Take care of means and standard deviations
@@ -277,7 +235,7 @@ class Forecaster():
         and one for the corresponding output values that need to be
         predicted.
         """
-        # Redefine variable to keep further visual noise low
+        # Redefine variable to keep further visual noise in code lower
         horizon = self.horizon
         lag = self.lag
 
@@ -401,6 +359,16 @@ class Forecaster():
         self._epochs = int(epochs)
 
     @property
+    def patience(self):
+        """Return the patience."""
+        return self._patience
+
+    @patience.setter
+    def patience(self, patience):
+        """Instantiate the patience."""
+        self._patience = int(patience)
+
+    @property
     def optimizer(self):
         """Return the optimizer name."""
         return self._optimizer.__class__.__name__
@@ -455,7 +423,7 @@ class CrossValidator():
         # Training fraction depends on number of folds and test fraction
         print("Training fraction is {}.".format(1 - val_fraction * n_folds))
 
-    def evaluate(self, data, targets=None, n_samples=100, verbose=True):
+    def evaluate(self, data, targets=None, n_samples=100, verbose=1):
         """Evaluate forecaster."""
         folds = self._generate_folds(data)
         lag = self.forecaster.lag
@@ -471,15 +439,13 @@ class CrossValidator():
         for i, (data_train, data_val) in enumerate(folds):
             # Quietly fit the forecaster to this fold's training set
             forecaster = self.forecaster
+            forecaster._is_fitted = False #  Make sure we refit the forecaster
             t0 = time.time()
             forecaster.fit(
                 data_train,
                 targets=targets,
-                patience=1e6,  # training only using max_epochs
-                val_frac=1e-2,  # no need for validation fraction
-                verbose=1  # Fit in silence
+                verbose=0  # Fit in silence
             )
-            duration = round(time.time() - t0)
 
             # Depending on the horizon, we make multiple predictions on the
             # test set and need to create those input output pairs
@@ -498,7 +464,6 @@ class CrossValidator():
                 data_pred = data_val[:, lag:lag + n_horizon * horizon, targets]
             else:
                 data_pred = data_val[:, lag:lag + n_horizon * horizon, :]
-
 
             # Make predictions for each of the input chunks
             predictions_mean, predictions_samples = [], []
@@ -526,26 +491,33 @@ class CrossValidator():
                     predictions_mean,
                     data_pred
                 )
-            metrics = metrics.append(metrics_append, ignore_index=True)
 
             # Update coverage metrics for this fold
-            for percentile in percentiles:
+            for perc in percentiles:
                 val_perc = np.percentile(
                     predictions_samples,
-                    percentile,
+                    perc,
                     axis=0
                 )
-                metrics['p' + str(percentile)] = custom_metrics.coverage(
+                metrics_append['p' + str(perc)] = custom_metrics.coverage(
                     val_perc,
                     data_pred
                 )
+            metrics = metrics.append(metrics_append, ignore_index=True)
 
             # Update the user on the validation status
-            print("Validation fold {} took {} s.".format(i, duration))
+            duration = round(time.time() - t0)
+            if verbose > 0:
+                print("Validation fold {} took {} s.".format(i, duration))
 
         # Clean up the metrics table
-        metrics.index.name = 'fold'
+        avg = pd.DataFrame(metrics.mean()).T
+        avg.index = ['avg.']
+        std = pd.DataFrame(metrics.std()).T
+        std.index = ['std.']
+        metrics = pd.concat([metrics, avg, std])
         metrics = metrics.round(2)
+        metrics.index.name = 'fold'
 
         # Store predictions in case they are needed for plotting
         self.predictions_mean = predictions_mean
