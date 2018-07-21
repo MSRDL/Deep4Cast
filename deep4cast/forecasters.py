@@ -97,7 +97,7 @@ class Forecaster():
         # Remove NaN's that occur during windowing
         X_train = X_train[~np.isnan(y_train)[:, 0, 0]]
         y_train = y_train[~np.isnan(y_train)[:, 0, 0]]
-        
+
         # Normalize the data before feeding it into the model
         X_train, y_train = self._normalize(X_train, y_train)
 
@@ -180,7 +180,7 @@ class Forecaster():
 
             # Make predictions for parameters of pdfs then sample from pdfs
             raw_predictions = self.model.predict(X, self.batch_size)
-            raw_predictions = self._loss.sample(raw_predictions)
+            raw_predictions = self._loss.sample(raw_predictions, n_samples)
 
             # Take care of means and standard deviations
             predictions = self._unnormalize_targets(raw_predictions)
