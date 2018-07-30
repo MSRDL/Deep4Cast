@@ -113,13 +113,10 @@ class heteroscedastic_gaussian():
         where mean and log_var are arrays of shape (n_batch, n_steps, n_vars).
 
         """
-        if n_samples > 1:
-            size = list(mean.shape)
-            size[0] *= n_samples
-        else:
-            size = mean.shape
+        mean = np.repeat(mean, n_samples, axis=0)
+        std = np.repeat(np.exp(0.5 * log_var), n_samples, axis=0)
+        size = mean.shape
 
-        std = np.exp(0.5 * log_var)
         samples = np.random.standard_normal(size=size)
 
         return samples * std + mean
@@ -185,13 +182,10 @@ class heteroscedastic_t():
         where mean and log_var are arrays of shape (n_batch, n_steps, n_vars).
 
         """
-        if n_samples > 1:
-            size = list(mean.shape)
-            size[0] *= n_samples
-        else:
-            size = mean.shape
+        mean = np.repeat(mean, n_samples, axis=0)
+        std = np.repeat(np.exp(0.5 * log_var), n_samples, axis=0)
+        size = mean.shape
 
-        std = np.exp(0.5 * log_var)
         samples = np.random.standard_t(self.nu, size=size)
 
         return samples * std + mean
