@@ -24,11 +24,11 @@ class Forecaster():
     :type topology: keras.model
     :param batch_size: Training batch size.
     :type batch_size: int
-    :param epochs: Maximum number of training epochs.
-    :type epochs: int
+    :param max_epochs: Maximum number of training max_epochs.
+    :type max_epochs: int
     :param val_frac: Fraction of data points to set aside for validation.
     :type val_frac: float
-    :param patience: number of epochs to wait before early stopping,
+    :param patience: number of max_epochs to wait before early stopping,
     :type patience: float
 
     """
@@ -40,7 +40,9 @@ class Forecaster():
                  loss='heteroscedastic_gaussian',
                  optimizer='nadam',
                  batch_size=32,
-                 epochs=100,
+                 max_epochs=100,
+                 val_frac=0.1, 
+                 patience=5,
                  **kwargs):
         """Initialize properties."""
 
@@ -54,7 +56,9 @@ class Forecaster():
         self.lag = lag
         self.horizon = horizon
         self.batch_size = batch_size
-        self.epochs = epochs
+        self.max_epochs = max_epochs
+        self.val_frac = val_frac
+        self.patience = patience
         self.loss = loss
         self._loss = None
         self.history = None
@@ -86,23 +90,37 @@ class Forecaster():
         self._check_data_format(data)
 
         # Make sure the floats have the correct format
-        data_train = self._convert_to_float32(data)
+        data = self._convert_to_float32(data)
+
+        # Split the input data into training and validation set to handle
+        # early stopping
+        val_length = int(max([len(x) for x in data]) * self.val_frac)
+        data_train, data_val = [], []
+        for time_series in data:
+            data_train.append(time_series[:-val_length, :])
+            data_val.append(time_series[-val_length:, :])
+        data_train = np.array(data_train)
+        data_val = np.array(data_val)
 
         # The model expects input-output data pairs, so we create them from
         # the time series arrary by windowing. Xs are 3D tensors
         # of shape number of batch_size, timesteps, input_dim and
         # ys are 2D tensors of lag * dimensionality.
         X_train, y_train = self._sequentialize(data_train)
+        X_val, y_val = self._sequentialize(data_val)
 
         # Remove NaN's that occur during windowing
         X_train = X_train[~np.isnan(y_train)[:, 0, 0]]
         y_train = y_train[~np.isnan(y_train)[:, 0, 0]]
+        X_val = X_val[~np.isnan(y_val)[:, 0, 0]]
+        y_val = y_val[~np.isnan(y_val)[:, 0, 0]]
 
         # Normalize the data before feeding it into the model
         X_train, y_train = self._normalize(X_train, y_train)
+        X_val, y_val = self._normalize(X_val, y_val, locked=True)
 
         # Prepare model output shape based on loss function type to handle
-        # loss functions that requires multiple parameters such as the #
+        # loss functions that requires multiple parameters such as the
         # heteroscedsatic Gaussian
         if isinstance(self.loss, str):
             self._loss = getattr(custom_losses, self.loss)(
@@ -113,12 +131,17 @@ class Forecaster():
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y_train.shape[1], y_train.shape[2] * loss_dim_factor)
 
+        # Need to handle the case where the model is fitted for more epochs
+        # after it has already been fitted
         if not self._is_fitted:
             # Set up the model based on internal model class
             self.model.build_layers(
                 input_shape=X_train.shape[1:],
                 output_shape=output_shape
             )
+
+            # Built-in early stopping as Keras callback
+            es = EarlyStopping(monitor='val_loss', patience=self.patience)
 
             # Keras needs to compile the computational graph before fitting
             self.model.compile(
@@ -132,8 +155,10 @@ class Forecaster():
             y_train,
             shuffle=True,
             batch_size=int(self.batch_size),
-            epochs=int(self.epochs),
-            verbose=verbose
+            epochs=int(self.max_epochs),
+            verbose=verbose,
+            validation_data=(X_val, y_val),
+            callbacks=[es]
         )
 
         # Change state to fitted so that other methods work correctly
@@ -148,10 +173,12 @@ class Forecaster():
         :param quantiles: Tuple of quantiles for credicble interval.
         :type quantiles: tuple
         """
-        # Check if model is fitted and data doesn't contains NaNs and such
+        # Check if model is actually fitted
         self._check_is_fitted()
 
-        # Now only use the last window from the input sequences
+        # Now only use the last window from the input sequences to predict as
+        # that is the only part of the input data that is needed for 
+        # prediction
         data_pred = []
         for time_series in data:
             data_pred.append(time_series[-self.lag:, :])
@@ -180,7 +207,10 @@ class Forecaster():
 
             # Make predictions for parameters of pdfs then sample from pdfs
             raw_predictions = self.model.predict(X, self.batch_size)
-            raw_predictions = self._loss.sample(raw_predictions, n_samples)
+            raw_predictions = self._loss.sample(
+                raw_predictions,
+                n_samples=100
+            )
 
             # Take care of means and standard deviations
             predictions = self._unnormalize_targets(raw_predictions)
@@ -349,14 +379,14 @@ class Forecaster():
         self._batch_size = int(batch_size)
 
     @property
-    def epochs(self):
-        """Return the epochs."""
-        return self._epochs
+    def max_epochs(self):
+        """Return the max_epochs."""
+        return self._max_epochs
 
-    @epochs.setter
-    def epochs(self, epochs):
-        """Instantiate the epochs."""
-        self._epochs = int(epochs)
+    @max_epochs.setter
+    def max_epochs(self, max_epochs):
+        """Instantiate the max_epochs."""
+        self._max_epochs = int(max_epochs)
 
     @property
     def patience(self):
@@ -407,13 +437,19 @@ class CrossValidator():
 
     def __init__(self,
                  forecaster: Forecaster,
-                 val_fraction=0.1,
+                 test_fraction=0.1,
                  n_folds=2,
                  loss='rmse',
                  metrics=['mape', 'smape']):
         """Initialize properties."""
+
+        # Forecaster properties
         self.forecaster = forecaster
-        self.val_fraction = val_fraction
+        self.targets = None
+        self.n_samples = 1000
+
+        # Cross-validation properties
+        self.test_fraction = test_fraction
         self.n_folds = n_folds
         self.loss = loss
         self.metrics = metrics
@@ -421,13 +457,16 @@ class CrossValidator():
         self.predictions_samples = None
 
         # Training fraction depends on number of folds and test fraction
-        print("Training fraction is {}.".format(1 - val_fraction * n_folds))
+        print("Training + validation fraction is {}.".format(1 - test_fraction * n_folds))
 
-    def evaluate(self, data, targets=None, n_samples=100, verbose=1):
+    def evaluate(self, data, targets=None, verbose=1):
         """Evaluate forecaster."""
         folds = self._generate_folds(data)
         lag = self.forecaster.lag
         horizon = self.forecaster.horizon
+
+        # Forecaster fitting and prediction parameters
+        self.targets  = targets
 
         # Set up the metrics dictionary also containing the main loss
         percentiles = [1, 5, 25, 50, 75, 95, 99]
@@ -439,11 +478,11 @@ class CrossValidator():
         for i, (data_train, data_val) in enumerate(folds):
             # Quietly fit the forecaster to this fold's training set
             forecaster = self.forecaster
-            forecaster._is_fitted = False #  Make sure we refit the forecaster
+            forecaster._is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
             forecaster.fit(
                 data_train,
-                targets=targets,
+                targets=self.targets,
                 verbose=0  # Fit in silence
             )
 
@@ -460,8 +499,10 @@ class CrossValidator():
 
             # Time series values to be forecasted
             n_horizon = (data_val.shape[1] - lag) // horizon
-            if targets:
-                data_pred = data_val[:, lag:lag + n_horizon * horizon, targets]
+            if self.targets:
+                data_pred = data_val[
+                    :, lag:lag + n_horizon * horizon, self.targets
+                ]
             else:
                 data_pred = data_val[:, lag:lag + n_horizon * horizon, :]
 
@@ -470,7 +511,7 @@ class CrossValidator():
             for input_data in inputs:
                 prediction = forecaster.predict(
                     input_data,
-                    n_samples=n_samples
+                    n_samples=self.n_samples
                 )
                 predictions_mean.append(prediction['mean'])
                 predictions_samples.append(prediction['samples'])
@@ -534,7 +575,7 @@ class CrossValidator():
         for time_series in data:
             data_length.append(len(time_series))
         data_length = max(data_length)
-        test_length = int(data_length * self.val_fraction)
+        test_length = int(data_length * self.test_fraction)
         train_length = data_length - self.n_folds * test_length
 
         # Loop over number of folds to generate folds for cross-validation
