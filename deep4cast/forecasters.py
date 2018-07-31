@@ -41,7 +41,7 @@ class Forecaster():
                  optimizer='nadam',
                  batch_size=32,
                  max_epochs=100,
-                 val_frac=0.1, 
+                 val_frac=0.1,
                  patience=5,
                  **kwargs):
         """Initialize properties."""
@@ -98,7 +98,7 @@ class Forecaster():
         data_train, data_val = [], []
         for time_series in data:
             data_train.append(time_series[:-val_length, :])
-            data_val.append(time_series[-val_length:, :])
+            data_val.append(time_series[-val_length-self.lag:, :])
         data_train = np.array(data_train)
         data_val = np.array(data_val)
 
@@ -140,14 +140,15 @@ class Forecaster():
                 output_shape=output_shape
             )
 
-            # Built-in early stopping as Keras callback
-            es = EarlyStopping(monitor='val_loss', patience=self.patience)
-
             # Keras needs to compile the computational graph before fitting
             self.model.compile(
                 loss=self._loss,
                 optimizer=self._optimizer
             )
+
+
+        # Built-in early stopping as Keras callback
+        es = EarlyStopping(monitor='val_loss', patience=self.patience)
 
         # Fit model to data
         self.history = self.model.fit(
@@ -164,7 +165,7 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly
         self._is_fitted = True
 
-    def predict(self, data, n_samples=100, quantiles=(5, 95)):
+    def predict(self, data, n_samples=1000, quantiles=(5, 95)):
         """Generate predictions for input time series numpy array.
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
@@ -177,7 +178,7 @@ class Forecaster():
         self._check_is_fitted()
 
         # Now only use the last window from the input sequences to predict as
-        # that is the only part of the input data that is needed for 
+        # that is the only part of the input data that is needed for
         # prediction
         data_pred = []
         for time_series in data:
@@ -198,7 +199,7 @@ class Forecaster():
             X, y = self._sequentialize(time_series)
 
             # Standardize the data before feeding it into the model
-            X, y = self._normalize(X, y, locked=True)
+            X, __ = self._normalize(X, y, locked=True)
 
             # Repeat the prediction n_samples times to generate samples from
             # approximate posterior predictive distribution.
@@ -209,7 +210,7 @@ class Forecaster():
             raw_predictions = self.model.predict(X, self.batch_size)
             raw_predictions = self._loss.sample(
                 raw_predictions,
-                n_samples=100
+                n_samples=1
             )
 
             # Take care of means and standard deviations
@@ -217,7 +218,7 @@ class Forecaster():
 
             # Calculate staticts on predictions
             reshuffled_predictions = []
-            for i in range(n_samples**2):
+            for i in range(n_samples):
                 block = predictions[i * block_size:(i + 1) * block_size]
                 reshuffled_predictions.append(block)
             predictions = np.array(reshuffled_predictions)
@@ -225,10 +226,14 @@ class Forecaster():
             mean = np.mean(predictions, axis=0)
             std = np.std(predictions, axis=0)
             lower_quantile = np.percentile(
-                predictions, quantiles[0], axis=0
+                predictions,
+                quantiles[0],
+                axis=0
             )
             upper_quantile = np.percentile(
-                predictions, quantiles[1], axis=0
+                predictions,
+                quantiles[1],
+                axis=0
             )
 
             means.append(mean)
@@ -465,7 +470,7 @@ class CrossValidator():
         horizon = self.forecaster.horizon
 
         # Forecaster fitting and prediction parameters
-        self.targets  = targets
+        self.targets = targets
 
         # Set up the metrics dictionary also containing the main loss
         percentiles = [1, 5, 25, 50, 75, 95, 99]

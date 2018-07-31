@@ -14,6 +14,77 @@ from keras.models import Model
 from . import custom_layers
 
 
+class LSTNet(Model):
+    """Extends keras.models.Model object.
+
+    Implementation of LSTNet topology for multivariate time series. 
+    See https://arxiv.org/pdf/1703.07015.pdf
+
+    :param conv_filters: Number of filters for conv layer.
+    :type conv_filters: int
+    :param rnn_units: Number of hidden RNN units.
+    :type rnn_units: int
+    :param activation: Activation function.
+    :type activation: string
+
+    """
+    def __init__(self, conv_filters=32, rnn_units=32, activation='relu'):
+        """Initialize attributes."""
+        self.conv_filters = conv_filters
+        self.rnn_units = rnn_units
+        self.activation = activation
+        self._dropout_layer = custom_layers.ConcreteDropout
+
+    def build_layers(self, input_shape, output_shape):
+        """Build layers of the network.
+
+        :param input_shape: Length and dimensionality of time series.
+        :type input_shape: tuple
+        :param output_shape: Output shape for predictions.
+        :type output_shape: tuple
+
+        """
+        # First layer behaves differently cause of the difference in
+        # channels for the conv laters.
+        inputs = keras.layers.Input(shape=input_shape)
+
+        # Convolutional layer
+        outputs = keras.layers.Conv1D(
+            filters=self.conv_filters,
+            kernel_size=2,
+            strides=1,
+            padding='causal',
+            dilation_rate=1,
+            use_bias=True,
+            activation=self.activation
+        )(inputs)
+        outputs = self._dropout_layer()(outputs)
+
+        # Recurrent component
+        outputs = keras.layers.GRU(
+            units=self.rnn_units,
+            activation=self.activation,
+            return_sequences=True
+        )(outputs)
+        outputs = self._dropout_layer()(outputs)
+
+        # Attention layer
+        outputs = custom_layers.Attention()(outputs)
+        outputs = self._dropout_layer()(outputs)
+
+        # Autoregressive component
+        ar = custom_layers.AutoRegression()(inputs)
+        ar = self._dropout_layer()(ar)
+
+        # Finalize output
+        outputs = keras.layers.Add()([outputs, ar])
+        outputs = self._dropout_layer()(outputs)
+        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
+        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
+
+        super(LSTNet, self).__init__(inputs, outputs)
+
+
 class StackedGRU(Model):
     """Extends keras.models.Model object.
 
@@ -46,11 +117,9 @@ class StackedGRU(Model):
         :type output_shape: tuple
 
         """
-        # First layer behaves differently cause of the difference in
-        # channele for the conv laters.
         inputs, outputs = self.build_input(input_shape)
 
-        # Core fof the network is created here
+        # Core of the network is created here
         for power in range(1, self.num_layers):
             outputs = self.build_gru_block(outputs)
 
@@ -112,8 +181,8 @@ class WaveNet(Model):
 
     Implementation of WaveNet-like topology for multivariate time series.
 
-    :param num_filters: Number of hidden units for each layer.
-    :type num_filters: int
+    :param filters: Number of hidden units for each layer.
+    :type filters: int
     :param num_layers: Number of stacked layers.
     :type num_layers: int
     :param activation: Activation function.
@@ -121,12 +190,12 @@ class WaveNet(Model):
 
     """
 
-    def __init__(self, num_filters=32, num_layers=1, activation='relu'):
+    def __init__(self, filters=32, num_layers=1, activation='relu'):
         """Initialize attributes."""
         if num_layers < 1:
             raise ValueError('num_layers must be > 1.')
 
-        self.num_filters = num_filters
+        self.filters = filters
         self.num_layers = num_layers
         self.activation = activation
         self._dropout_layer = custom_layers.ConcreteDropout
@@ -157,7 +226,7 @@ class WaveNet(Model):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
         outputs = keras.layers.Conv1D(
-            filters=self.num_filters,
+            filters=self.filters,
             kernel_size=2,
             strides=1,
             padding='causal',
@@ -169,7 +238,7 @@ class WaveNet(Model):
         outputs = self._dropout_layer()(outputs)
 
         skip = keras.layers.SeparableConv1D(
-            filters=self.num_filters,
+            filters=self.filters,
             kernel_size=1,
             padding='same',
             name='skip_1',
@@ -198,7 +267,7 @@ class WaveNet(Model):
     def build_wavenet_block(self, x, power):
         """Build core of the network."""
         outputs = keras.layers.Conv1D(
-            filters=self.num_filters,
+            filters=self.filters,
             kernel_size=2,
             strides=1,
             padding='causal',
@@ -213,7 +282,7 @@ class WaveNet(Model):
         return outputs
 
 
-class CustomTopologyMode(Model):
+class CustomTopologyModel(Model):
     """Extends keras.models.Model object.
 
     Include automatically constructed layers from input topology to

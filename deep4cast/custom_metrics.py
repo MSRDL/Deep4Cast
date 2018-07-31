@@ -4,10 +4,23 @@
 
 import numpy as np
 
+
 def check_input_shapes(data1, data2):
     """Check if input arrays are of the same shape."""
     if data1.shape != data2.shape:
         raise ValueError("Shape of {} != {}.".format(data1.shape, data2.shape))
+
+
+def corr(data, data_truth):
+    """Computes the empirical correlation betnween actuals and predictions
+    :param data: Predicted time series values (n_timesteps, n_timeseries)
+    :type data: numpy array
+    :param data_truth: Ground truth time series values
+    :type data_truth: numpy array
+    """
+    check_input_shapes(data, data_truth)
+
+    return np.corrcoeff(data, data_truth, rowvar=False)
 
 
 def mae(data, data_truth):
@@ -59,6 +72,20 @@ def rmse(data, data_truth):
     check_input_shapes(data, data_truth)
 
     return np.sqrt(mse(data, data_truth))
+
+
+def rse(data, data_truth):
+    """Computes root relative squared error (RSE)
+    :param data: Predicted time series values (n_timesteps, n_timeseries)
+    :type data: numpy array
+    :param data_truth: Ground truth time series values
+    :type data_truth: numpy array
+    """
+    check_input_shapes(data, data_truth)
+
+    normalization = np.sqrt(np.sum(data_truth - np.mean(data_truth, axis=0)))
+
+    return np.sqrt(np.sum(np.square(data - data_truth))) / normalization
 
 
 def smape(data, data_truth):
