@@ -4,12 +4,6 @@
 
 ```Deep4cast``` provides easy access to deep learning-based tools for forecasting, anomaly detection, and counterfactual analysis.
 
-### Forecasting
-Quickstart tutorial can be found in ```/tutorials/quickstart.ipynb```.
-
-### Anomaly Detection
-Tutorial coming soon.
-
 ## Documentation
 Documentation can be found in ```/docs/build/html/index.html```.
 
