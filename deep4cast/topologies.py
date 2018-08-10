@@ -17,7 +17,7 @@ from . import custom_layers
 class LSTNet(Model):
     """Extends keras.models.Model object.
 
-    Implementation of LSTNet topology for multivariate time series. 
+    Implementation of LSTNet topology for multivariate time series.
     See https://arxiv.org/pdf/1703.07015.pdf
 
     :param conv_filters: Number of filters for conv layer.

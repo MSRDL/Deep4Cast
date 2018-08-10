@@ -38,8 +38,8 @@ class Forecaster():
                  lag,
                  horizon,
                  loss='heteroscedastic_gaussian',
-                 optimizer='nadam',
-                 batch_size=32,
+                 optimizer='adam',
+                 batch_size=16,
                  max_epochs=100,
                  val_frac=0.1,
                  patience=5,
@@ -115,10 +115,6 @@ class Forecaster():
         X_val = X_val[~np.isnan(y_val)[:, 0, 0]]
         y_val = y_val[~np.isnan(y_val)[:, 0, 0]]
 
-        # Normalize the data before feeding it into the model
-        X_train, y_train = self._normalize(X_train, y_train)
-        X_val, y_val = self._normalize(X_val, y_val, locked=True)
-
         # Prepare model output shape based on loss function type to handle
         # loss functions that requires multiple parameters such as the
         # heteroscedsatic Gaussian
@@ -145,7 +141,6 @@ class Forecaster():
                 loss=self._loss,
                 optimizer=self._optimizer
             )
-
 
         # Built-in early stopping as Keras callback
         es = EarlyStopping(monitor='val_loss', patience=self.patience)
@@ -188,18 +183,14 @@ class Forecaster():
         # Make sure the floats have the correct format
         data_pred = self._convert_to_float32(data_pred)
 
-        means, stds, lower_quantiles, upper_quantiles = [], [], [], []
-        samples = []
+        means, samples = [], []
         for time_series in data_pred:
             time_series = np.expand_dims(time_series, 0)
             # The model expects input-output data pairs, so we create them from
             # the time series arrary by windowing. Xs are 3D tensors
             # of shape number of batch_size, timesteps, input_dim and
             # ys are 2D tensors of lag * dimensionality.
-            X, y = self._sequentialize(time_series)
-
-            # Standardize the data before feeding it into the model
-            X, __ = self._normalize(X, y, locked=True)
+            X, __ = self._sequentialize(time_series)
 
             # Repeat the prediction n_samples times to generate samples from
             # approximate posterior predictive distribution.
@@ -207,52 +198,27 @@ class Forecaster():
             X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
 
             # Make predictions for parameters of pdfs then sample from pdfs
-            raw_predictions = self.model.predict(X, self.batch_size)
-            raw_predictions = self._loss.sample(
-                raw_predictions,
-                n_samples=1
+            predictions = self.model.predict(X, self.batch_size)
+            predictions = self._loss.sample(
+                predictions,
+                n_samples=10
             )
 
-            # Take care of means and standard deviations
-            predictions = self._unnormalize_targets(raw_predictions)
-
-            # Calculate staticts on predictions
+            # Calculate the mean of the predictions
             reshuffled_predictions = []
             for i in range(n_samples):
                 block = predictions[i * block_size:(i + 1) * block_size]
                 reshuffled_predictions.append(block)
             predictions = np.array(reshuffled_predictions)
-
             mean = np.mean(predictions, axis=0)
-            std = np.std(predictions, axis=0)
-            lower_quantile = np.percentile(
-                predictions,
-                quantiles[0],
-                axis=0
-            )
-            upper_quantile = np.percentile(
-                predictions,
-                quantiles[1],
-                axis=0
-            )
-
             means.append(mean)
-            stds.append(std)
-            lower_quantiles.append(lower_quantile)
-            upper_quantiles.append(upper_quantile)
             samples.append(predictions)
 
         means = np.array(means)[:, 0, :, :]
-        stds = np.array(stds)[:, 0, :, :]
-        lower_quantiles = np.array(lower_quantiles)[:, 0, :, :]
-        upper_quantiles = np.array(upper_quantiles)[:, 0, :, :]
         samples = np.array(samples)[:, :, 0, :]
         samples = np.swapaxes(samples, 0, 1)
 
         return {'mean': means,
-                'std': stds,
-                'lower_quantile': lower_quantiles,
-                'upper_quantile': upper_quantiles,
                 'samples': samples}
 
     @staticmethod
@@ -308,34 +274,6 @@ class Forecaster():
         X = np.array(X)
         y = np.array(y)
         return X, y
-
-    def _normalize(self, X, y, locked=False):
-        """normalize numpy array.
-        :param data: Input time series.
-        :type data: numpy array
-        :param data: Boolean that locks down the scales of the data.
-        :type data: boolean
-        """
-
-        if not locked:
-            self._features_means = np.mean(X, axis=0)
-            self._features_scales = np.std(X, axis=0)
-            self._target_means = np.mean(y, axis=0)
-            self._target_scales = np.std(y, axis=0)
-            self._is_normalized = True
-
-        # Standardize the data
-        X_norm = np.copy(X)
-        y_norm = np.copy(y)
-        X_norm = (X_norm - self._features_means) / self._features_scales
-        y_norm = (y_norm - self._target_means) / self._target_scales
-
-        return X_norm, y_norm
-
-    def _unnormalize_targets(self, y):
-        """Un-normalize numpy array."""
-        # Unnormalize, taking presence of covariates into account.
-        return y * self._target_scales + self._target_means
 
     def _check_data_format(self, data):
         """Raise error if data has incorrect format."""

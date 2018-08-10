@@ -8,6 +8,7 @@ from keras.legacy import interfaces
 from keras import initializers
 from keras.engine import InputSpec
 
+
 class ConcreteDropout(Layer):
 
     @interfaces.legacy_dropout_support
