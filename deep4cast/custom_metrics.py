@@ -52,6 +52,21 @@ def mape(data, data_truth):
     return np.mean(np.abs(data - data_truth) / normalization) * 100.0
 
 
+def smape(data, data_truth):
+    """Computes symmetric mean absolute percentage error (SMAPE)
+    :param data: Predicted time series values (n_timesteps, n_timeseries)
+    :type data: numpy array
+    :param data_truth: Ground truth time series values
+    :type data_truth: numpy array
+    """
+    check_input_shapes(data, data_truth)
+
+    eps = 1e-16  # Need to make sure that denominator is not zero
+    normalization = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
+
+    return np.mean(np.abs(data - data_truth) / normalization) * 100.0
+
+
 def mse(data, data_truth):
     """Computes mean squared error (MSE)
     :param data: Predicted time series values (n_timesteps, n_timeseries)
@@ -88,21 +103,6 @@ def rse(data, data_truth):
     normalization = np.sqrt(np.sum(data_truth - np.mean(data_truth, axis=0)))
 
     return np.sqrt(np.sum(np.square(data - data_truth))) / normalization
-
-
-def smape(data, data_truth):
-    """Computes symmetric mean absolute percentage error (SMAPE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :type data: numpy array
-    :param data_truth: Ground truth time series values
-    :type data_truth: numpy array
-    """
-    check_input_shapes(data, data_truth)
-
-    eps = 1e-16  # Need to make sure that denominator is not zero
-    normalization = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
-
-    return np.mean(np.abs(data - data_truth) / normalization) * 100.0
 
 
 def coverage(data_samples, data_truth, percentiles):
@@ -149,3 +149,22 @@ def pinball_loss(data_samples, data_truth, percentiles):
 
     # Add overall mean pinball loss
     return round(total / len(percentiles), 2)
+
+
+def std_smape(data_samples, data_truth):
+    """Computes mean absolute percentage error (MAPE) of 
+    sample standard deviation.
+    :param data_samples: Samples of time series values
+    :type data_samples: numpy array
+    :param data_truth: Ground truth time series values
+    :type data_truth: numpy array
+    """  
+    eps = 1e-16
+
+    mean = np.mean(data_samples, axis=0)
+    std = np.std(data_samples, axis=0)
+
+    abs_diff = np.abs(data_truth - mean)
+    normalization = 0.5*(np.abs(abs_diff) + np.abs(std)) + eps
+
+    return np.mean(np.abs(std - abs_diff) / normalization) * 100.0

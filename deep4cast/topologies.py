@@ -28,6 +28,7 @@ class LSTNet(Model):
     :type activation: string
 
     """
+
     def __init__(self, conv_filters=32, rnn_units=32, activation='relu'):
         """Initialize attributes."""
         self.conv_filters = conv_filters
@@ -49,6 +50,7 @@ class LSTNet(Model):
         inputs = keras.layers.Input(shape=input_shape)
 
         # Convolutional layer
+        outputs = self._dropout_layer(temporal_dropout=True)(inputs)
         outputs = keras.layers.Conv1D(
             filters=self.conv_filters,
             kernel_size=2,
@@ -57,23 +59,26 @@ class LSTNet(Model):
             dilation_rate=1,
             use_bias=True,
             activation=self.activation
-        )(inputs)
-        outputs = self._dropout_layer()(outputs)
+        )(outputs)
 
         # Recurrent component
+        outputs = self._dropout_layer(temporal_dropout=True)(outputs)
         outputs = keras.layers.GRU(
             units=self.rnn_units,
             activation=self.activation,
             return_sequences=True
         )(outputs)
-        outputs = self._dropout_layer()(outputs)
 
         # Attention layer
+        outputs = self._dropout_layer(temporal_dropout=True)(outputs)
         outputs = custom_layers.Attention()(outputs)
         outputs = self._dropout_layer()(outputs)
 
         # Autoregressive component
-        ar = custom_layers.AutoRegression()(inputs)
+        ar = custom_layers.AutoRegression(
+            channels = self.rnn_units,
+            window=min(24, input_shape[1])
+        )(inputs)
         ar = self._dropout_layer()(ar)
 
         # Finalize output
@@ -98,6 +103,7 @@ class StackedGRU(Model):
     :type activation: string
 
     """
+
     def __init__(self, units=32, num_layers=1, activation='relu'):
         """Initialize attributes."""
         if num_layers < 1:
@@ -131,11 +137,11 @@ class StackedGRU(Model):
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
+        inputs = self._dropout_layer(temporal_dropout=True)(inputs)
         outputs = keras.layers.GRU(
             units=self.units,
             activation=self.activation
         )(inputs)
-        outputs = self._dropout_layer()(outputs)
 
         skip = keras.layers.SeparableConv1D(
             filters=self.units,
@@ -150,6 +156,7 @@ class StackedGRU(Model):
 
     def build_output(self, x, output_shape):
         """Return last layer for network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
         outputs = keras.layers.Conv1D(
             filters=output_shape[1],
             kernel_size=1,
@@ -166,11 +173,11 @@ class StackedGRU(Model):
 
     def build_gru_block(self, x):
         """Build core of the network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
         outputs = keras.layers.GRU(
             units=self.units,
             activation=self.activation
         )(x)
-        outputs = self._dropout_layer()(outputs)
         outputs = keras.layers.Add()([outputs, x])
 
         return outputs
@@ -225,6 +232,7 @@ class WaveNet(Model):
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
+        inputs = self._dropout_layer(temporal_dropout=True)(inputs)
         outputs = keras.layers.Conv1D(
             filters=self.filters,
             kernel_size=2,
@@ -235,7 +243,6 @@ class WaveNet(Model):
             name='dilated_1',
             activation=self.activation
         )(inputs)
-        outputs = self._dropout_layer()(outputs)
 
         skip = keras.layers.SeparableConv1D(
             filters=self.filters,
@@ -250,6 +257,7 @@ class WaveNet(Model):
 
     def build_output(self, x, output_shape):
         """Return last layer for network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
         outputs = keras.layers.Conv1D(
             filters=output_shape[1],
             kernel_size=1,
@@ -266,6 +274,7 @@ class WaveNet(Model):
 
     def build_wavenet_block(self, x, power):
         """Build core of the network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
         outputs = keras.layers.Conv1D(
             filters=self.filters,
             kernel_size=2,
@@ -276,7 +285,6 @@ class WaveNet(Model):
             name='dilated_%d' % (2 ** power),
             activation=self.activation
         )(x)
-        outputs = self._dropout_layer()(outputs)
         outputs = keras.layers.Add()([outputs, x])
 
         return outputs

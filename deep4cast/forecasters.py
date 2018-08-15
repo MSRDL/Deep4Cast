@@ -16,8 +16,8 @@ from . import custom_losses, custom_metrics
 
 class Forecaster():
     """General forecaster class for forecasting time series.
-    :param model_class: Neural network model class.
-    :type model_class: keras model
+    :param topology: Neural network model class.
+    :type topology: keras model
     :param optimizer: Neural network optimizer.
     :type optimizer: string
     :param topology: Neural network topology.
@@ -47,7 +47,7 @@ class Forecaster():
         """Initialize properties."""
 
         # Neural network model attributes
-        self.model = topology
+        self.topology = topology
 
         # Model training attributes
         self.optimizer = optimizer
@@ -131,13 +131,13 @@ class Forecaster():
         # after it has already been fitted
         if not self._is_fitted:
             # Set up the model based on internal model class
-            self.model.build_layers(
+            self.topology.build_layers(
                 input_shape=X_train.shape[1:],
                 output_shape=output_shape
             )
 
             # Keras needs to compile the computational graph before fitting
-            self.model.compile(
+            self.topology.compile(
                 loss=self._loss,
                 optimizer=self._optimizer
             )
@@ -146,7 +146,7 @@ class Forecaster():
         es = EarlyStopping(monitor='val_loss', patience=self.patience)
 
         # Fit model to data
-        self.history = self.model.fit(
+        self.history = self.topology.fit(
             X_train,
             y_train,
             shuffle=True,
@@ -198,10 +198,10 @@ class Forecaster():
             X = np.repeat(X, [n_samples for _ in range(len(X))], axis=0)
 
             # Make predictions for parameters of pdfs then sample from pdfs
-            predictions = self.model.predict(X, self.batch_size)
+            predictions = self.topology.predict(X, self.batch_size)
             predictions = self._loss.sample(
                 predictions,
-                n_samples=10
+                n_samples=1
             )
 
             # Calculate the mean of the predictions
@@ -378,9 +378,8 @@ class CrossValidator():
     """
 
     def __init__(self,
-                 forecaster: Forecaster,
-                 test_fraction=0.1,
-                 n_folds=2,
+                 forecaster,
+                 fold_generator,
                  loss='rmse',
                  metrics=['mape', 'smape']):
         """Initialize properties."""
@@ -391,19 +390,14 @@ class CrossValidator():
         self.n_samples = 1000
 
         # Cross-validation properties
-        self.test_fraction = test_fraction
-        self.n_folds = n_folds
+        self.fold_generator = fold_generator # Must be a generator 
         self.loss = loss
         self.metrics = metrics
         self.predictions_mean = None
         self.predictions_samples = None
 
-        # Training fraction depends on number of folds and test fraction
-        print("Training + validation fraction is {}.".format(1 - test_fraction * n_folds))
-
-    def evaluate(self, data, targets=None, verbose=1):
+    def evaluate(self, targets=None, verbose=1):
         """Evaluate forecaster."""
-        folds = self._generate_folds(data)
         lag = self.forecaster.lag
         horizon = self.forecaster.horizon
 
@@ -411,13 +405,13 @@ class CrossValidator():
         self.targets = targets
 
         # Set up the metrics dictionary also containing the main loss
-        percentiles = [1, 5, 25, 50, 75, 95, 99]
+        percentiles = np.linspace(0, 100, 101)
         percentile_names = ['p' + str(x) for x in percentiles]
         metrics = pd.DataFrame(
             columns=[self.loss, ] + self.metrics + percentile_names
         )
 
-        for i, (data_train, data_val) in enumerate(folds):
+        for i, (data_train, data_val) in enumerate(self.fold_generator):
             # Quietly fit the forecaster to this fold's training set
             forecaster = self.forecaster
             forecaster._is_fitted = False  # Make sure we refit the forecaster
