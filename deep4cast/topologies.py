@@ -76,7 +76,7 @@ class LSTNet(Model):
 
         # Autoregressive component
         ar = custom_layers.AutoRegression(
-            channels = self.rnn_units,
+            channels=self.rnn_units,
             window=min(24, input_shape[1])
         )(inputs)
         ar = self._dropout_layer()(ar)
@@ -137,11 +137,11 @@ class StackedGRU(Model):
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
-        inputs = self._dropout_layer(temporal_dropout=True)(inputs)
+        outputs_first = self._dropout_layer(temporal_dropout=True)(inputs)
         outputs = keras.layers.GRU(
             units=self.units,
             activation=self.activation
-        )(inputs)
+        )(outputs_first)
 
         skip = keras.layers.SeparableConv1D(
             filters=self.units,
@@ -149,7 +149,7 @@ class StackedGRU(Model):
             padding='same',
             name='skip_1',
             use_bias=True
-        )(inputs)
+        )(outputs_first)
         outputs = keras.layers.Add()([outputs, skip])
 
         return inputs, outputs
@@ -232,7 +232,7 @@ class WaveNet(Model):
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
-        inputs = self._dropout_layer(temporal_dropout=True)(inputs)
+        outputs_first = self._dropout_layer(temporal_dropout=True)(inputs)
         outputs = keras.layers.Conv1D(
             filters=self.filters,
             kernel_size=2,
@@ -242,7 +242,7 @@ class WaveNet(Model):
             use_bias=True,
             name='dilated_1',
             activation=self.activation
-        )(inputs)
+        )(outputs_first)
 
         skip = keras.layers.SeparableConv1D(
             filters=self.filters,
@@ -250,7 +250,7 @@ class WaveNet(Model):
             padding='same',
             name='skip_1',
             use_bias=True
-        )(inputs)
+        )(outputs_first)
         outputs = keras.layers.Add()([outputs, skip])
 
         return inputs, outputs

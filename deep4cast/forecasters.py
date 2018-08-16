@@ -9,7 +9,6 @@ import time
 import numpy as np
 import pandas as pd
 import keras.optimizers
-from keras.callbacks import EarlyStopping
 
 from . import custom_losses, custom_metrics
 
@@ -41,8 +40,6 @@ class Forecaster():
                  optimizer='adam',
                  batch_size=16,
                  max_epochs=100,
-                 val_frac=0.1,
-                 patience=5,
                  **kwargs):
         """Initialize properties."""
 
@@ -57,8 +54,6 @@ class Forecaster():
         self.horizon = horizon
         self.batch_size = batch_size
         self.max_epochs = max_epochs
-        self.val_frac = val_frac
-        self.patience = patience
         self.loss = loss
         self._loss = None
         self.history = None
@@ -90,30 +85,17 @@ class Forecaster():
         self._check_data_format(data)
 
         # Make sure the floats have the correct format
-        data = self._convert_to_float32(data)
-
-        # Split the input data into training and validation set to handle
-        # early stopping
-        val_length = int(max([len(x) for x in data]) * self.val_frac)
-        data_train, data_val = [], []
-        for time_series in data:
-            data_train.append(time_series[:-val_length, :])
-            data_val.append(time_series[-val_length-self.lag:, :])
-        data_train = np.array(data_train)
-        data_val = np.array(data_val)
+        data_train = self._convert_to_float32(data)
 
         # The model expects input-output data pairs, so we create them from
         # the time series arrary by windowing. Xs are 3D tensors
         # of shape number of batch_size, timesteps, input_dim and
         # ys are 2D tensors of lag * dimensionality.
         X_train, y_train = self._sequentialize(data_train)
-        X_val, y_val = self._sequentialize(data_val)
 
         # Remove NaN's that occur during windowing
         X_train = X_train[~np.isnan(y_train)[:, 0, 0]]
         y_train = y_train[~np.isnan(y_train)[:, 0, 0]]
-        X_val = X_val[~np.isnan(y_val)[:, 0, 0]]
-        y_val = y_val[~np.isnan(y_val)[:, 0, 0]]
 
         # Prepare model output shape based on loss function type to handle
         # loss functions that requires multiple parameters such as the
@@ -142,9 +124,6 @@ class Forecaster():
                 optimizer=self._optimizer
             )
 
-        # Built-in early stopping as Keras callback
-        es = EarlyStopping(monitor='val_loss', patience=self.patience)
-
         # Fit model to data
         self.history = self.topology.fit(
             X_train,
@@ -153,8 +132,6 @@ class Forecaster():
             batch_size=int(self.batch_size),
             epochs=int(self.max_epochs),
             verbose=verbose,
-            validation_data=(X_val, y_val),
-            callbacks=[es]
         )
 
         # Change state to fitted so that other methods work correctly
@@ -183,7 +160,7 @@ class Forecaster():
         # Make sure the floats have the correct format
         data_pred = self._convert_to_float32(data_pred)
 
-        means, samples = [], []
+        samples = []
         for time_series in data_pred:
             time_series = np.expand_dims(time_series, 0)
             # The model expects input-output data pairs, so we create them from
@@ -210,16 +187,12 @@ class Forecaster():
                 block = predictions[i * block_size:(i + 1) * block_size]
                 reshuffled_predictions.append(block)
             predictions = np.array(reshuffled_predictions)
-            mean = np.mean(predictions, axis=0)
-            means.append(mean)
             samples.append(predictions)
 
-        means = np.array(means)[:, 0, :, :]
         samples = np.array(samples)[:, :, 0, :]
         samples = np.swapaxes(samples, 0, 1)
 
-        return {'mean': means,
-                'samples': samples}
+        return samples
 
     @staticmethod
     def _convert_to_float32(array):
@@ -291,56 +264,6 @@ class Forecaster():
             raise ValueError('The model has not been fitted.')
 
     @property
-    def horizon(self):
-        """Return the horizon."""
-        return self._horizon
-
-    @horizon.setter
-    def horizon(self, horizon):
-        """Instantiate the horizon."""
-        self._horizon = int(horizon)
-
-    @property
-    def lag(self):
-        """Return the lag."""
-        return self._lag
-
-    @lag.setter
-    def lag(self, lag):
-        """Instantiate the lag."""
-        self._lag = int(lag)
-
-    @property
-    def batch_size(self):
-        """Return the batch_size."""
-        return self._batch_size
-
-    @batch_size.setter
-    def batch_size(self, batch_size):
-        """Instantiate the batch_size."""
-        self._batch_size = int(batch_size)
-
-    @property
-    def max_epochs(self):
-        """Return the max_epochs."""
-        return self._max_epochs
-
-    @max_epochs.setter
-    def max_epochs(self, max_epochs):
-        """Instantiate the max_epochs."""
-        self._max_epochs = int(max_epochs)
-
-    @property
-    def patience(self):
-        """Return the patience."""
-        return self._patience
-
-    @patience.setter
-    def patience(self, patience):
-        """Instantiate the patience."""
-        self._patience = int(patience)
-
-    @property
     def optimizer(self):
         """Return the optimizer name."""
         return self._optimizer.__class__.__name__
@@ -376,12 +299,11 @@ class CrossValidator():
     :type loss: string
 
     """
-
     def __init__(self,
                  forecaster,
                  fold_generator,
-                 loss='rmse',
-                 metrics=['mape', 'smape']):
+                 loss='normal_log_likelihood',
+                 metrics=['smape', 'pinball_loss']):
         """Initialize properties."""
 
         # Forecaster properties
@@ -390,11 +312,10 @@ class CrossValidator():
         self.n_samples = 1000
 
         # Cross-validation properties
-        self.fold_generator = fold_generator # Must be a generator 
+        self.fold_generator = fold_generator  # Must be a generator
         self.loss = loss
         self.metrics = metrics
-        self.predictions_mean = None
-        self.predictions_samples = None
+        self.prediction_samples = None
 
     def evaluate(self, targets=None, verbose=1):
         """Evaluate forecaster."""
@@ -411,11 +332,13 @@ class CrossValidator():
             columns=[self.loss, ] + self.metrics + percentile_names
         )
 
-        for i, (data_train, data_val) in enumerate(self.fold_generator):
-            # Quietly fit the forecaster to this fold's training set
+        for i, data_train in enumerate(self.fold_generator):
+            # Set up the forecaster
             forecaster = self.forecaster
             forecaster._is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
+
+            # Quietly fit the forecaster to this fold's training set
             forecaster.fit(
                 data_train,
                 targets=self.targets,
@@ -426,38 +349,36 @@ class CrossValidator():
             # test set and need to create those input output pairs
             j = 0
             inputs = []
-            while (j + 1) * horizon + lag <= data_val.shape[1]:
+            while (j + 1) * horizon + lag <= data_train.shape[1]:
                 tmp = []
-                for time_series in data_val:
+                for time_series in data_train:
                     tmp.append(time_series[j * horizon:j * horizon + lag, :])
                 inputs.append(np.array(tmp))
                 j += 1
 
             # Time series values to be forecasted
-            n_horizon = (data_val.shape[1] - lag) // horizon
+            n_horizon = (data_train.shape[1] - lag) // horizon
             if self.targets:
-                data_pred = data_val[
+                data_pred = data_train[
                     :, lag:lag + n_horizon * horizon, self.targets
                 ]
             else:
-                data_pred = data_val[:, lag:lag + n_horizon * horizon, :]
+                data_pred = data_train[:, lag:lag + n_horizon * horizon, :]
 
             # Make predictions for each of the input chunks
-            predictions_mean, predictions_samples = [], []
+            prediction_samples = []
             for input_data in inputs:
-                prediction = forecaster.predict(
+                samples = forecaster.predict(
                     input_data,
                     n_samples=self.n_samples
                 )
-                predictions_mean.append(prediction['mean'])
-                predictions_samples.append(prediction['samples'])
-            predictions_mean = np.concatenate(predictions_mean, axis=1)
-            predictions_samples = np.concatenate(predictions_samples, axis=2)
+                prediction_samples.append(samples)
+            prediction_samples = np.concatenate(prediction_samples, axis=2)
 
             # Update the loss for this fold
             metrics_append = {}
             metrics_append[self.loss] = getattr(custom_metrics, self.loss)(
-                predictions_mean,
+                prediction_samples,
                 data_pred
             )
 
@@ -465,19 +386,14 @@ class CrossValidator():
             for metric in self.metrics:
                 func = getattr(custom_metrics, metric)
                 metrics_append[metric] = func(
-                    predictions_mean,
+                    prediction_samples,
                     data_pred
                 )
 
             # Update coverage metrics for this fold
             for perc in percentiles:
-                val_perc = np.percentile(
-                    predictions_samples,
-                    perc,
-                    axis=0
-                )
                 metrics_append['p' + str(perc)] = custom_metrics.coverage(
-                    val_perc,
+                    prediction_samples,
                     data_pred
                 )
             metrics = metrics.append(metrics_append, ignore_index=True)
@@ -497,39 +413,6 @@ class CrossValidator():
         metrics.index.name = 'fold'
 
         # Store predictions in case they are needed for plotting
-        self.predictions_mean = predictions_mean
-        self.predictions_samples = predictions_samples
+        self.prediction_samples = prediction_samples
 
         return metrics
-
-    def _generate_folds(self, data):
-        """Yield a data fold."""
-        lag = self.forecaster.lag
-
-        # Find the maximum length of all example time series in the dataset.
-        data_length = []
-        for time_series in data:
-            data_length.append(len(time_series))
-        data_length = max(data_length)
-        test_length = int(data_length * self.test_fraction)
-        train_length = data_length - self.n_folds * test_length
-
-        # Loop over number of folds to generate folds for cross-validation
-        # but make sure that the folds do not overlap.
-        for i in range(self.n_folds):
-            data_train, data_val = [], []
-            for time_series in data:
-                train_ind = np.arange(
-                    -(i + 1) * test_length - train_length,
-                    -(i + 1) * test_length
-                )
-                test_ind = np.arange(
-                    -(i + 1) * test_length - lag,
-                    -i * test_length
-                )
-                data_train.append(time_series[train_ind, :])
-                data_val.append(time_series[test_ind, :])
-            data_train = np.array(data_train)
-            data_val = np.array(data_val)
-
-            yield data_train, data_val
