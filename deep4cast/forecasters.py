@@ -26,7 +26,6 @@ class Forecaster():
         self.model = model  # Neural network architecture (Keras model)
         self.lag = lag   # Lookback window (length of input)
         self.horizon = horizon  # Forecasting horizon (length of output)
-        self.targets = None  # Index of forecasting target time series
 
         # Optimizer attributes
         self.optimizer = optimizer
@@ -45,11 +44,9 @@ class Forecaster():
         # Boolean checks
         self.is_fitted = False
 
-    def fit(self, X, y, targets=None, verbose=0):
+    def fit(self, X, y, verbose=0):
         """Fit model to data."""
-        self.targets = targets
-
-        # Make sure the data type is float32 for optimal performance of all 
+        # Make sure the data type is float32 for optimal performance of all
         # Keras backends.
         X = X.astype('float32')
         y = y.astype('float32')
@@ -59,7 +56,7 @@ class Forecaster():
         # heteroscedsatic Gaussian
         if isinstance(self.loss, str):
             self._loss = getattr(custom_losses, self.loss)(
-                n_dim=y.shape[1]
+                n_dim=y.shape[2]
             )
         else:
             self._loss = self.loss
@@ -119,9 +116,6 @@ class Forecaster():
             reshuffled_predictions.append(block)
         predictions = np.array(reshuffled_predictions)
 
-        predictions = np.array(predictions)[:, :, 0, :]
-        predictions = np.swapaxes(predictions, 0, 1)
-
         return predictions
 
     def check_is_fitted(self):
@@ -142,7 +136,7 @@ class Forecaster():
 
     def get_optimizer_args(self):
         """Get optimizer parameters."""
-        args = getargspec(self._optimizer)[0]
+        args = getargspec(self._optimizer.__class__)[0]
         args.remove('self')
         return args
 

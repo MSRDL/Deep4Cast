@@ -97,7 +97,7 @@ def transform(X, func, targets=None):
         return func(X)
     else:
         _X = X.copy()
-        _X[:,:,targets] = func(_X[:,:,targets])
+        _X[:, :, targets] = func(_X[:, :, targets])
         return _X
 
 
