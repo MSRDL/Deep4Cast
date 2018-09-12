@@ -38,7 +38,7 @@ class Forecaster():
         allowed_kwargs = self.get_optimizer_args()
         for key, value in kwargs.items():
             if key not in allowed_kwargs:
-                raise ValueError('{} not a valid argument.'.fomat(key))
+                raise ValueError('{} not a valid argument.'.format(key))
         self.set_optimizer_args(kwargs)
 
         # Boolean checks
