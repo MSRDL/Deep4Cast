@@ -113,25 +113,6 @@ def rse(data_samples, data_truth):
     return np.sqrt(np.sum(np.square(data - data_truth))) / norm
 
 
-def std_smape(data_samples, data_truth):
-    """Computes mean absolute percentage error (MAPE) of
-    sample standard deviation.
-    :param data_samples: Samples of time series values
-    :type data_samples: numpy array
-    :param data_truth: Ground truth time series values
-    :type data_truth: numpy array
-    """
-    eps = 1e-16
-
-    mean = np.mean(data_samples, axis=0)
-    std = np.std(data_samples, axis=0)
-
-    abs_diff = np.abs(data_truth - mean)
-    norm = 0.5*(np.abs(abs_diff) + np.abs(std)) + eps
-
-    return round(np.mean(np.abs(std - abs_diff) / norm) * 100.0, 2)
-
-
 def coverage(data_samples, data_truth, percentiles=None):
     """Computes coverage rates of the prediction interval.
     :param data_samples: Samples of time series values
