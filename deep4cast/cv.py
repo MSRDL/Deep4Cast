@@ -1,3 +1,11 @@
+import time
+
+import numpy as np
+import pandas as pd
+
+from . import utils
+from . import custom_metrics
+
 
 class CrossValidator():
     """Temporal cross-validator class.
@@ -15,120 +23,190 @@ class CrossValidator():
     :type loss: string
 
     """
-    def __init__(self,
-                 forecaster,
-                 fold_generator,
-                 loss='normal_log_likelihood',
-                 metrics=['smape', 'pinball_loss']):
+
+    def __init__(self, forecaster, fold_generator, evaluator, scaler=None):
         """Initialize properties."""
-
-        # Forecaster properties
         self.forecaster = forecaster
-        self.targets = None
-        self.n_samples = 1000
-
-        # Cross-validation properties
         self.fold_generator = fold_generator  # Must be a generator
-        self.loss = loss
-        self.metrics = metrics
-        self.prediction_samples = None
+        self.evaluator = evaluator
+        self.scaler = scaler
 
-    def evaluate(self, targets=None, verbose=1):
+    def evaluate(self, n_samples=1000, verbose=True):
         """Evaluate forecaster."""
-        lag = self.forecaster.lag
-        horizon = self.forecaster.horizon
+        self.evaluator.reset()  # Make sure we have a clean evaluator
 
-        # Forecaster fitting and prediction parameters
-        self.targets = targets
-
-        # Set up the metrics dictionary also containing the main loss
-        percentiles = np.linspace(0, 100, 101)
-        percentile_names = ['p' + str(x) for x in percentiles]
-        metrics = pd.DataFrame(
-            columns=[self.loss, ] + self.metrics + percentile_names
-        )
-
-        for i, data_train in enumerate(self.fold_generator):
+        for X_train, X_test, y_train, y_test in self.fold_generator:
             # Set up the forecaster
             forecaster = self.forecaster
             forecaster._is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
 
+            # Transform the data
+            if self.scaler:
+                X_train = self.scaler.fit_transform_x(X_train)
+                X_test = self.scaler.transform_x(X_test)
+                y_train = self.scaler.fit_transform_y(y_train)
+
             # Quietly fit the forecaster to this fold's training set
-            forecaster.fit(
+            forecaster.fit(X_train, y_train, verbose=0)
+
+            # Generate predictions
+            y_pred_samples = forecaster.predict(X_test, n_samples=n_samples)
+
+            # Transform the samples back
+            y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples)
+
+            # Evaluate forecaster performance
+            self.evaluator.evaluate(y_pred_samples, y_test, verbose=verbose)
+            if verbose:
+                print('Evaluation took {} seconds.'.format(time.time() - t0))
+
+        return self.evaluator.tearsheet
+
+class FoldGenerator():
+
+    def __init__(self, data, targets, lag, horizon, test_fraction, n_folds):
+        self.data = data
+        self.targets = targets
+        self.lag = lag
+        self.horizon = horizon
+        self.test_fraction = test_fraction
+        self.n_folds = n_folds
+
+    def generate_folds(self):
+        """Yield a data fold."""
+        # Find the maximum length of all example time series in the dataset.
+        data_length = []
+        for time_series in self.data:
+            data_length.append(len(time_series))
+        data_length = max(data_length)
+        test_length = int(data_length * self.test_fraction)
+        train_length = data_length - self.n_folds * test_length
+
+        # Loop over number of folds to generate folds for cross-validation
+        # but make sure that the folds do not overlap.
+        for i in range(self.n_folds):
+            data_train, data_test = [], []
+            for time_series in self.data:
+                train_ind = np.arange(
+                    -(i + 1) * test_length - train_length,
+                    -(i + 1) * test_length
+                )
+                test_ind = np.arange(
+                    -(i + 1) * test_length - self.lag,
+                    -i * test_length
+                )
+                data_train.append(time_series[train_ind, :])
+                data_test.append(time_series[test_ind, :])
+            data_train = np.array(data_train)
+            data_test = np.array(data_test)
+
+            # Sequentialize dataset
+            X_train, y_train = utils.sequentialize(
                 data_train,
-                targets=self.targets,
-                verbose=0  # Fit in silence
+                self.lag,
+                self.horizon,
+                targets=self.targets
             )
-
-            # Depending on the horizon, we make multiple predictions on the
-            # test set and need to create those input output pairs
-            j = 0
-            inputs = []
-            while (j + 1) * horizon + lag <= data_train.shape[1]:
-                tmp = []
-                for time_series in data_train:
-                    tmp.append(time_series[j * horizon:j * horizon + lag, :])
-                inputs.append(np.array(tmp))
-                j += 1
-
-            # Time series values to be forecasted
-            n_horizon = (data_train.shape[1] - lag) // horizon
-            if self.targets:
-                data_pred = data_train[
-                    :, lag:lag + n_horizon * horizon, self.targets
-                ]
-            else:
-                data_pred = data_train[:, lag:lag + n_horizon * horizon, :]
-
-            # Make predictions for each of the input chunks
-            prediction_samples = []
-            for input_data in inputs:
-                samples = forecaster.predict(
-                    input_data,
-                    n_samples=self.n_samples
-                )
-                prediction_samples.append(samples)
-            prediction_samples = np.concatenate(prediction_samples, axis=2)
-
-            # Update the loss for this fold
-            metrics_append = {}
-            metrics_append[self.loss] = getattr(custom_metrics, self.loss)(
-                prediction_samples,
-                data_pred
+            X_test, y_test = utils.sequentialize(
+                data_test,
+                self.lag,
+                self.horizon,
+                targets=self.targets
             )
+            yield X_train, X_test, y_train, y_test
 
-            # Update other performance metrics for this fold
-            for metric in self.metrics:
-                func = getattr(custom_metrics, metric)
-                metrics_append[metric] = func(
-                    prediction_samples,
-                    data_pred
-                )
 
-            # Update coverage metrics for this fold
-            for perc in percentiles:
-                metrics_append['p' + str(perc)] = custom_metrics.coverage(
-                    prediction_samples,
-                    data_pred
-                )
-            metrics = metrics.append(metrics_append, ignore_index=True)
+class MetricsEvaluator():
 
-            # Update the user on the validation status
-            duration = round(time.time() - t0)
-            if verbose > 0:
-                print("Validation fold {} took {} s.".format(i, duration))
+    def __init__(self, metrics, filename=None):
+        self.metrics = metrics
+        self.tearsheet = pd.DataFrame(columns=self.metrics)
+        self.filename = filename
 
-        # Clean up the metrics table
-        avg = pd.DataFrame(metrics.mean()).T
-        avg.index = ['avg.']
-        std = pd.DataFrame(metrics.std()).T
-        std.index = ['std.']
-        metrics = pd.concat([metrics, avg, std])
-        metrics = metrics.round(2)
-        metrics.index.name = 'fold'
+    def evaluate(self, y_samples, y_truth, verbose=False):
+        eval_results = {}
+        for metric in self.metrics:
+            try:
+                eval_func = getattr(custom_metrics, metric)
+                eval_results[metric] = eval_func(y_samples, y_truth)
+                if verbose:
+                    print('Results for {}:\n'.format(metric))
+                    print(eval_results[metric])
+            except:
+                print('{} not a valid metric'.format(metric))
+        self.tearsheet.append(eval_results, ignore_index=True)
+        if self.filename:
+            self.to_pickle()
 
-        # Store predictions in case they are needed for plotting
-        self.prediction_samples = prediction_samples
+    def to_pickle(self):
+        self.tearsheet.to_pickle(self.filename)
 
-        return metrics
+    def reset(self):
+        self.tearsheet = pd.DataFrame(columns=self.metrics)
+
+
+class VectorScaler():
+    """Defines a VectorScaler."""
+
+    def __init__(self, targets=None):
+        self.targets = targets
+        self.x_mean = None
+        self.x_std = None
+        self.x_is_fitted = False
+        self.y_mean = None
+        self.y_std = None
+        self.y_is_fitted = False
+
+    def fit_x(self, X):
+        """Fit the scaler."""
+        if self.targets is None:
+            mean = np.mean(X, axis=0)
+            std = np.std(X, axis=0)
+        else:
+            # Need to concatenate mean with zeros and stds with ones for
+            # categorical targets
+            mean = np.mean(X[:, :, self.targets], axis=0)
+            std = np.std(X[:, :, self.targets], axis=0)
+            cat_shape = (X.shape[1],
+                         X.shape[2] - len(self.targets))
+            zeros = np.zeros(shape=cat_shape)
+            ones = np.ones(shape=cat_shape)
+            mean = np.concatenate((mean, zeros), axis=1)
+            std = np.concatenate((std, ones), axis=1)
+
+        self.x_mean = mean
+        self.x_std = std
+        self.x_is_fitted = True
+
+    def fit_y(self, y):
+        """Fit the scaler."""
+        self.y_mean = np.mean(y, axis=0)
+        self.y_std = np.std(y, axis=0)
+        self.y_is_fitted = True
+
+    def transform_x(self, X):
+        return (X - self.x_mean) / self.x_std
+
+    def transform_y(self, y):
+        return (y - self.y_mean) / self.y_std
+
+    def fit_transform_x(self, X):
+        self.fit_x(X)
+        return self.transform_x(X)
+
+    def fit_transform_y(self, y):
+        self.fit_y(y)
+        return self.transform_x(y)
+
+    def inverse_transform_x(self, X):
+        if self.x_is_fitted:
+            return X * self.x_std + self.x_mean
+        else:
+            raise ValueError('Not fitted on X.')
+
+    def inverse_transform_y(self, y):
+        if self.y_is_fitted:
+            return y * self.y_std + self.y_mean
+        else:
+            raise ValueError('Not fitted on y.')

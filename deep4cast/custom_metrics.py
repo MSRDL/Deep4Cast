@@ -4,7 +4,6 @@
 import numpy as np
 
 
-
 def corr(data_samples, data_truth):
     """Computes the empirical correlation betnween actuals and predictions
     :param data: Predicted time series values (n_timesteps, n_timeseries)
@@ -57,22 +56,6 @@ def smape(data_samples, data_truth):
     norm = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
 
     return round(np.mean(np.abs(data - data_truth) / norm) * 100.0, 2)
-
-
-def normal_log_likelihood(data_samples, data_truth):
-    """Return log likelihood for this distribution."""
-    # Need the invert variance parameterized by an exponential
-    # for numeric stability.
-    mean = np.mean(data_samples, axis=0)
-    var = np.var(data_samples, axis=0)
-    log_var = np.log(var)
-
-    # Calculate the mean error over all data points
-    squares = np.square(mean - data_truth)
-    weighted_squares = squares / var + log_var
-    log_likelihood = np.mean(weighted_squares)
-
-    return -log_likelihood
 
 
 def mse(data_samples, data_truth):
