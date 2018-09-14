@@ -5,6 +5,14 @@ import pandas as pd
 
 from . import utils
 from . import custom_metrics
+from inspect import getargspec
+from skopt.utils import use_named_args
+from skopt import gp_minimize
+
+
+__MODEL_ARGS__ = ['filters', 'num_layers']
+__OPTIMIZER_ARGS__ = ['lr']
+__FORECASTER_ARGS__ = ['epochs', 'batch_size']
 
 
 class CrossValidator():
@@ -24,7 +32,12 @@ class CrossValidator():
 
     """
 
-    def __init__(self, forecaster, fold_generator, evaluator, scaler=None):
+    def __init__(self,
+                 forecaster,
+                 fold_generator,
+                 evaluator,
+                 scaler=None,
+                 optimizer=None):
         """Initialize properties."""
         self.forecaster = forecaster
         self.fold_generator = fold_generator  # Must be a generator
@@ -35,7 +48,7 @@ class CrossValidator():
         """Evaluate forecaster."""
         self.evaluator.reset()  # Make sure we have a clean evaluator
 
-        for X_train, X_test, y_train, y_test in self.fold_generator:
+        for X_train, X_test, y_train, y_test in self.fold_generator():
             # Set up the forecaster
             forecaster = self.forecaster
             forecaster._is_fitted = False  # Make sure we refit the forecaster
@@ -63,6 +76,46 @@ class CrossValidator():
 
         return self.evaluator.tearsheet
 
+
+class Optimizer():
+
+    def __init__(self, X_train, y_train, y_test, forecaster, space, metric):
+        self.X_train = X_train
+        self.y_train = y_train
+        self.y_test = y_test
+        self.forecaster = forecaster
+        self.space = space
+        self.metric = getattr(custom_metrics, metric)
+
+    def get_objective(self, **args, space):
+        args = self.get_args()
+
+        for key, value in args:
+            if key in args['model'] and key in __MODEL_ARGS__:
+                setattr(self.forecaster.model, key, value)
+            elif key in args['forecaster'] and key in __OPTIMIZER_ARGS__:
+                setattr(self.forecaster._optimizer, key, value)
+            elif key in args['forecaster'] and key in __FORECASTER_ARGS__:
+                setattr(self.forecaster, key, value)
+            else:
+                raise ValueError('{} not a valid argument'.format(key))
+
+        @use_named_args(space)
+        def objective(**args):
+            self.forecaster.fit(self._X_train, self.y_train, verbose=0)
+            
+
+    def get_args(self):
+        model_args = getargspec(self.forecaster.model.__class__).args
+        forecaster_args = getargspec(self.forecaster.__class__).args
+        optimizer_args = getargspec(self.forecaster._optimizer.__class__).args
+        return {
+            'model': model_args,
+            'forecaster': forecaster_args,
+            'optimizer': optimizer_args
+        }
+
+
 class FoldGenerator():
 
     def __init__(self, data, targets, lag, horizon, test_fraction, n_folds):
@@ -72,6 +125,9 @@ class FoldGenerator():
         self.horizon = horizon
         self.test_fraction = test_fraction
         self.n_folds = n_folds
+
+    def __call__(self):
+        return self.generate_folds()
 
     def generate_folds(self):
         """Yield a data fold."""
@@ -131,11 +187,13 @@ class MetricsEvaluator():
                 eval_func = getattr(custom_metrics, metric)
                 eval_results[metric] = eval_func(y_samples, y_truth)
                 if verbose:
-                    print('Results for {}:\n'.format(metric))
-                    print(eval_results[metric])
+                    print('Results for {} is {}.'.format(
+                        metric,
+                        eval_results[metric])
+                    )
             except:
                 print('{} not a valid metric'.format(metric))
-        self.tearsheet.append(eval_results, ignore_index=True)
+        self.tearsheet = self.tearsheet.append(eval_results, ignore_index=True)
         if self.filename:
             self.to_pickle()
 
@@ -197,7 +255,7 @@ class VectorScaler():
 
     def fit_transform_y(self, y):
         self.fit_y(y)
-        return self.transform_x(y)
+        return self.transform_y(y)
 
     def inverse_transform_x(self, X):
         if self.x_is_fitted:

@@ -220,7 +220,7 @@ class WaveNet(Model):
         # channele for the conv laters.
         inputs, outputs = self.build_input(input_shape)
 
-        # Core fof the network is created here
+        # Core of the network is created here
         for power in range(1, self.num_layers):
             outputs = self.build_wavenet_block(outputs, power)
 
