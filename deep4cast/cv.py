@@ -145,6 +145,7 @@ class FoldGenerator():
     :type horizon: numpy array
 
     """
+
     def __init__(self, data, targets, lag, horizon, test_fraction, n_folds):
         """Initialize properties."""
         self.data = data
@@ -218,6 +219,7 @@ class MetricsEvaluator():
     :param optimizer: Optimizer.
     :type optimizer: An optimizer class
     """
+
     def __init__(self, metrics, filename=None):
         """Initialize properties."""
         self.metrics = metrics
@@ -261,6 +263,7 @@ class VectorScaler():
     :type targets: list
 
     """
+
     def __init__(self, targets=None):
         """Initialize properties."""
         self.targets = targets
@@ -279,14 +282,10 @@ class VectorScaler():
         else:
             # Need to concatenate mean with zeros and stds with ones for
             # categorical targets
-            mean = np.mean(X[:, :, self.targets], axis=0)
-            std = np.std(X[:, :, self.targets], axis=0)
-            cat_shape = (X.shape[1],
-                         X.shape[2] - len(self.targets))
-            zeros = np.zeros(shape=cat_shape)
-            ones = np.ones(shape=cat_shape)
-            mean = np.concatenate((mean, zeros), axis=1)
-            std = np.concatenate((std, ones), axis=1)
+            mean = np.zeros(X.shape[1:])
+            std = np.ones(X.shape[1:])
+            mean[:, self.targets] = np.mean(X[:, :, self.targets], axis=0)
+            std[:, self.targets] = np.std(X[:, :, self.targets], axis=0)
 
         self.x_mean = mean
         self.x_std = std
