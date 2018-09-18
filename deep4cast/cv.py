@@ -12,7 +12,7 @@ from skopt import gp_minimize
 
 __MODEL_ARGS__ = ['filters', 'num_layers']
 __OPTIMIZER_ARGS__ = ['lr']
-__FORECASTER_ARGS__ = ['epochs', 'batch_size']
+__FORECASTER_ARGS__ = ['epochs', 'batch_size' ,'lag']
 
 
 class CrossValidator():
@@ -23,13 +23,14 @@ class CrossValidator():
 
     :param forecaster: Forecaster.
     :type forecaster: A forecaster class
-    :param val_frac: Fraction of data to be used for validation per fold.
-    :type val_frac: float
-    :param n_folds: Number of temporal folds.
-    :type n_folds: int
-    :param loss: The kind of loss used for evaluating the forecaster on folds.
-    :type loss: string
-
+    :param fold_generator: Fold generator.
+    :type fold_generator: A fold generator class
+    :param evaluator: Evaluator.
+    :type evaluator: An evaluator class
+    :param scaler: Scaler.
+    :type scaler: A scaler class
+    :param optimizer: Optimizer.
+    :type optimizer: An optimizer class
     """
 
     def __init__(self,
@@ -43,6 +44,9 @@ class CrossValidator():
         self.fold_generator = fold_generator  # Must be a generator
         self.evaluator = evaluator
         self.scaler = scaler
+
+        # Optimizer arguments
+        self.space = None
 
     def evaluate(self, n_samples=1000, verbose=True):
         """Evaluate forecaster."""
@@ -76,34 +80,31 @@ class CrossValidator():
 
         return self.evaluator.tearsheet
 
-
-class Optimizer():
-
-    def __init__(self, X_train, y_train, y_test, forecaster, space, metric):
-        self.X_train = X_train
-        self.y_train = y_train
-        self.y_test = y_test
-        self.forecaster = forecaster
-        self.space = space
-        self.metric = getattr(custom_metrics, metric)
-
-    def get_objective(self, **args, space):
+    def optimize(self, space, metric, n_calls=2, n_samples=1000):
         args = self.get_args()
 
-        for key, value in args:
-            if key in args['model'] and key in __MODEL_ARGS__:
-                setattr(self.forecaster.model, key, value)
-            elif key in args['forecaster'] and key in __OPTIMIZER_ARGS__:
-                setattr(self.forecaster._optimizer, key, value)
-            elif key in args['forecaster'] and key in __FORECASTER_ARGS__:
-                setattr(self.forecaster, key, value)
-            else:
-                raise ValueError('{} not a valid argument'.format(key))
-
         @use_named_args(space)
-        def objective(**args):
-            self.forecaster.fit(self._X_train, self.y_train, verbose=0)
-            
+        def objective(**params):
+            print(params)
+            for key, value in params.items():
+                if key in args['model'] and key in __MODEL_ARGS__:
+                    setattr(self.forecaster.model, key, value)
+                elif key in args['optimizer'] and key in __OPTIMIZER_ARGS__:
+                    setattr(self.forecaster._optimizer, key, value)
+                elif key in args['forecaster'] and key in __FORECASTER_ARGS__:
+                    setattr(self.forecaster, key, value)
+                else:
+                    raise ValueError('{} not a valid argument'.format(key))
+
+            tearsheet = self.evaluate(n_samples=n_samples, verbose=False)
+            print(tearsheet)
+            return np.mean(tearsheet[metric])
+
+        # Optimize everything
+        res_gp = gp_minimize(objective, space, n_calls=n_calls, random_state=0)
+
+        return res_gp
+
 
     def get_args(self):
         model_args = getargspec(self.forecaster.model.__class__).args
