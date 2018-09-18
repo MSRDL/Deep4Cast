@@ -70,13 +70,15 @@ class CrossValidator():
                 y_train = self.scaler.fit_transform_y(y_train)
 
             # Quietly fit the forecaster to this fold's training set
-            forecaster.fit(X_train, y_train, verbose=0)
+            forecaster.fit(X_train, y_train, verbose=verbose)
 
             # Generate predictions
             y_pred_samples = forecaster.predict(X_test, n_samples=n_samples)
 
             # Transform the samples back
-            y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples)
+            if self.scaler:
+                y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples
+                                                                 )
 
             # Evaluate forecaster performance
             self.evaluator.evaluate(y_pred_samples, y_test, verbose=verbose)
@@ -85,14 +87,14 @@ class CrossValidator():
 
         return self.evaluator.tearsheet
 
-    def optimize(self, space, metric, n_calls=2, n_samples=1000):
+    def optimize(self, space, metric, n_calls=10, n_samples=1000):
         """Optimize the forecaster parameters."""
         args = self.get_args()
 
         @use_named_args(space)
         def objective(**params):
-            """This is the function that we build fgor the optimizer to
-            optimizer."""
+            """This is the function that we build for the optimizer to
+            optimize."""
             for key, value in params.items():
                 if key in args['model'] and key in __MODEL_ARGS__:
                     setattr(self.forecaster.model, key, value)
@@ -105,6 +107,7 @@ class CrossValidator():
 
             # Tearsheet is the summary of this CV run
             tearsheet = self.evaluate(n_samples=n_samples, verbose=False)
+            print(tearsheet)
 
             # We take the mean value of the tearsheet metric that we care
             # about as optimization objective
