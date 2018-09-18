@@ -107,6 +107,7 @@ class CrossValidator():
 
             # Tearsheet is the summary of this CV run
             tearsheet = self.evaluate(n_samples=n_samples, verbose=True)
+            print(params)
             print(tearsheet)
 
             # We take the mean value of the tearsheet metric that we care
