@@ -60,7 +60,7 @@ class CrossValidator():
         for X_train, X_test, y_train, y_test in self.fold_generator():
             # Set up the forecaster
             forecaster = self.forecaster
-            forecaster._is_fitted = False  # Make sure we refit the forecaster
+            forecaster.is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
 
             # Transform the data
