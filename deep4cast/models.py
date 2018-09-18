@@ -1,68 +1,243 @@
 # -*- coding: utf-8 -*-
-"""Neural network models module.
+"""Topologies module.
 
-This module provides access to neural network models for different time
-series forecasting purposes. These models function with uni- and
-multi-variate time series alike.
+This module provides access to neural network topologies that can be used
+insdide the forecaster module.
 
 """
 from inspect import getargspec
 
-import keras.layers
 import numpy as np
+import keras.layers
 from keras.models import Model
 
 from . import custom_layers
 
 
-class SharedLayerModel(Model):
+class StackedGRU(Model):
+    """Extends keras.models.Model object.
+
+    Implementation of stacked GRU topology for multivariate time series.
+
+    :param units: Number of hidden units for each layer.
+    :type units: int
+    :param num_layers: Number of stacked layers.
+    :type num_layers: int
+    :param activation: Activation function.
+    :type activation: string
+
+    """
+
+    def __init__(self, units=32, num_layers=1, activation='relu'):
+        """Initialize attributes."""
+        if num_layers < 1:
+            raise ValueError('num_layers must be > 1.')
+
+        self.units = units
+        self.num_layers = num_layers
+        self.activation = activation
+        self._dropout_layer = custom_layers.ConcreteDropout
+
+    def build_layers(self, input_shape, output_shape):
+        """Build layers of the network.
+
+        :param input_shape: Length and dimensionality of time series.
+        :type input_shape: tuple
+        :param output_shape: Output shape for predictions.
+        :type output_shape: tuple
+
+        """
+        inputs, outputs = self.build_input(input_shape)
+
+        # Core of the network is created here
+        for power in range(1, self.num_layers):
+            outputs = self.build_gru_block(outputs)
+
+        # Finally we need to match the output dimensions
+        outputs = self.build_output(outputs, output_shape)
+
+        super(StackedGRU, self).__init__(inputs, outputs)
+
+    def build_input(self, input_shape):
+        """Return first layer of network."""
+        inputs = keras.layers.Input(shape=input_shape)
+        outputs_first = self._dropout_layer(temporal_dropout=True)(inputs)
+        outputs = keras.layers.GRU(
+            units=self.units,
+            activation=self.activation
+        )(outputs_first)
+
+        skip = keras.layers.SeparableConv1D(
+            filters=self.units,
+            kernel_size=1,
+            padding='same',
+            name='skip_1',
+            use_bias=True
+        )(outputs_first)
+        outputs = keras.layers.Add()([outputs, skip])
+
+        return inputs, outputs
+
+    def build_output(self, x, output_shape):
+        """Return last layer for network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
+        outputs = keras.layers.Conv1D(
+            filters=output_shape[1],
+            kernel_size=1,
+            padding='same',
+            name='skip_out',
+            use_bias=True
+        )(x)
+        outputs = keras.layers.Flatten()(outputs)
+        outputs = self._dropout_layer()(outputs)
+        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
+        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
+
+        return outputs
+
+    def build_gru_block(self, x):
+        """Build core of the network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
+        outputs = keras.layers.GRU(
+            units=self.units,
+            activation=self.activation
+        )(x)
+        outputs = keras.layers.Add()([outputs, x])
+
+        return outputs
+
+
+class WaveNet(Model):
+    """Extends keras.models.Model object.
+
+    Implementation of WaveNet-like topology for multivariate time series.
+
+    :param filters: Number of hidden units for each layer.
+    :type filters: int
+    :param num_layers: Number of stacked layers.
+    :type num_layers: int
+    :param activation: Activation function.
+    :type activation: string
+
+    """
+
+    def __init__(self, filters=32, num_layers=1, activation='relu'):
+        """Initialize attributes."""
+        if num_layers < 1:
+            raise ValueError('num_layers must be > 1.')
+
+        self.filters = filters
+        self.num_layers = num_layers
+        self.activation = activation
+        self._dropout_layer = custom_layers.ConcreteDropout
+
+    def build_layers(self, input_shape, output_shape):
+        """Build layers of the network.
+
+        :param input_shape: Length and dimensionality of time series.
+        :type input_shape: tuple
+        :param output_shape: Output shape for predictions.
+        :type output_shape: tuple
+
+        """
+        # First layer behaves differently cause of the difference in
+        # channele for the conv laters.
+        inputs, outputs = self.build_input(input_shape)
+
+        # Core of the network is created here
+        for power in range(1, self.num_layers):
+            outputs = self.build_wavenet_block(outputs, power)
+
+        # Finally we need to match the output dimensions
+        outputs = self.build_output(outputs, output_shape)
+
+        super(WaveNet, self).__init__(inputs, outputs)
+
+    def build_input(self, input_shape):
+        """Return first layer of network."""
+        inputs = keras.layers.Input(shape=input_shape)
+        outputs_first = self._dropout_layer(temporal_dropout=True)(inputs)
+        outputs = keras.layers.Conv1D(
+            filters=self.filters,
+            kernel_size=2,
+            strides=1,
+            padding='causal',
+            dilation_rate=1,
+            use_bias=True,
+            name='dilated_1',
+            activation=self.activation
+        )(outputs_first)
+
+        skip = keras.layers.SeparableConv1D(
+            filters=self.filters,
+            kernel_size=1,
+            padding='same',
+            name='skip_1',
+            use_bias=True
+        )(outputs_first)
+        outputs = keras.layers.Add()([outputs, skip])
+
+        return inputs, outputs
+
+    def build_output(self, x, output_shape):
+        """Return last layer for network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
+        outputs = keras.layers.Conv1D(
+            filters=output_shape[1],
+            kernel_size=1,
+            padding='same',
+            name='skip_out',
+            use_bias=True
+        )(x)
+        outputs = keras.layers.Flatten()(outputs)
+        outputs = self._dropout_layer()(outputs)
+        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
+        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
+
+        return outputs
+
+    def build_wavenet_block(self, x, power):
+        """Build core of the network."""
+        x = self._dropout_layer(temporal_dropout=True)(x)
+        outputs = keras.layers.Conv1D(
+            filters=self.filters,
+            kernel_size=2,
+            strides=1,
+            padding='causal',
+            dilation_rate=2 ** power,
+            use_bias=True,
+            name='dilated_%d' % (2 ** power),
+            activation=self.activation
+        )(x)
+        outputs = keras.layers.Add()([outputs, x])
+
+        return outputs
+
+
+class CustomTopologyModel(Model):
     """Extends keras.models.Model object.
 
     Include automatically constructed layers from input topology to
     make life easier when building regressors layer by layer and when
     optimizing network topology.
 
-    :param input_shape: Length and dimensionality of time series.
-    :type input_shape: tuple
-    :param output_shape: Output shape for predictions.
-    :type output_shape: tuple
     :param topology: Neural network topology.
     :type topology: list
-    :param uncertainty: True if applying MC Dropout after every layer.
-    :type uncertainty: boolean
-    :param dropout_rate:  Fraction of the units to drop for the linear
-        transformation of the inputs. Float between 0 and 1.
-    :type dropout_rate: float
 
     """
 
-    def __init__(self,
-                 input_shape,
-                 output_shape,
-                 topology,
-                 uncertainty=False,
-                 concreteDropout=False,
-                 dropout_rate=0.1):
+    def __init__(self, topology):
         """Initialize attributes."""
-        self._input_shape = input_shape
-        self._output_shape = output_shape
         self._topology = topology
         self._rnd_init = 'glorot_normal'
-        self._uncertainty = uncertainty
-        self._concreteDropout = concreteDropout
-        self._dropout_rate = dropout_rate
+        self._dropout_layer = custom_layers.ConcreteDropout
 
-        # Initialize super class with custom layers
-        inputs, outputs = self._build_layers()
-        super(SharedLayerModel, self).__init__(inputs, outputs)
-
-    def _build_layers(self):
+    def build_layers(self, input_shape, output_shape):
         """Build model layers one layer at a time from topology."""
         layers = {}
-        rate = self._dropout_rate
 
         # Create an input layer using shape of data
-        layers['input'] = keras.layers.Input(shape=self._input_shape)
+        layers['input'] = keras.layers.Input(shape=input_shape)
 
         # Loop over all layers and construct layer relationships using
         # Keras functional API for complex networks.
@@ -99,20 +274,14 @@ class SharedLayerModel(Model):
             for parent_id in parent_ids:
                 next_id = parent_id
 
-                if self._uncertainty:
-                    # If MC Dropout, aka the Bayesian approximation to Neural
-                    # Networks should be used, we add Dropout after each layer,
-                    # even at test time.
-                    dropout_id = next_id + '_' + layer_id + '_dropout'
-                    if self._concreteDropout:
-                        layers[dropout_id] = custom_layers.ConcreteDropout(
-                            layers[next_id]
-                        )
-                    else:
-                        layers[dropout_id] = custom_layers.MCDropout(rate)(
-                            layers[next_id]
-                        )
-                    next_id = dropout_id
+                # If MC Dropout, aka the Bayesian approximation to Neural
+                # Networks should be used, we add Dropout after each layer,
+                # even at test time.
+                dropout_id = next_id + '_' + layer_id + '_dropout'
+                layers[dropout_id] = self._dropout_layer()(
+                    layers[next_id]
+                )
+                next_id = dropout_id
 
                 parents.append(layers[next_id])
 
@@ -126,24 +295,25 @@ class SharedLayerModel(Model):
 
         # Need to handle the output layer and reshaping for multi-step
         # forecasting.
-        if self._uncertainty:
-            dropout_id = layer_id + '_dense_dropout'
-            if self._concreteDropout:
-                layers[dropout_id] = custom_layers.ConcreteDropout(
-                    layers[layer_id]
-                )
-            else:
-                layers[dropout_id] = custom_layers.MCDropout(rate)(
-                    layers[layer_id]
-                )
-            layer_id = dropout_id
+        dropout_id = layer_id + '_dense_dropout'
+        layers[dropout_id] = self._dropout_layer()(
+            layers[layer_id]
+        )
+        layer_id = dropout_id
 
         layer_cls = keras.layers.Dense
-        params = {'units': np.prod(self._output_shape)}
+        params = {
+            'units': np.prod(output_shape),
+            'kernel_initializer': 'glorot_normal'
+        }
         layers['_dense'] = layer_cls(**params)(layers[layer_id])
 
         layer_cls = keras.layers.Reshape
-        params = {'target_shape': self._output_shape}
+        params = {'target_shape': output_shape}
         layers['output'] = layer_cls(**params)(layers['_dense'])
 
-        return layers['input'], layers['output']
+        # Initialize super class with custom layers
+        super(CustomTopologyModel, self).__init__(
+            layers['input'],
+            layers['output']
+        )
