@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""Cross-validation and optimization module.
+This module provides access to tools for cross-calidation and optimization of
+forecasters using Bayesian Optimization.
+"""
 import time
 
 import numpy as np
@@ -12,7 +17,7 @@ from skopt import gp_minimize
 
 __MODEL_ARGS__ = ['filters', 'num_layers']
 __OPTIMIZER_ARGS__ = ['lr']
-__FORECASTER_ARGS__ = ['epochs', 'batch_size' ,'lag']
+__FORECASTER_ARGS__ = ['epochs', 'batch_size', 'lag']
 
 
 class CrossValidator():
@@ -81,11 +86,13 @@ class CrossValidator():
         return self.evaluator.tearsheet
 
     def optimize(self, space, metric, n_calls=2, n_samples=1000):
+        """Optimize the forecaster parameters."""
         args = self.get_args()
 
         @use_named_args(space)
         def objective(**params):
-            print(params)
+            """This is the function that we build fgor the optimizer to
+            optimizer."""
             for key, value in params.items():
                 if key in args['model'] and key in __MODEL_ARGS__:
                     setattr(self.forecaster.model, key, value)
@@ -96,17 +103,25 @@ class CrossValidator():
                 else:
                     raise ValueError('{} not a valid argument'.format(key))
 
+            # Tearsheet is the summary of this CV run
             tearsheet = self.evaluate(n_samples=n_samples, verbose=False)
-            print(tearsheet)
+
+            # We take the mean value of the tearsheet metric that we care
+            # about as optimization objective
             return np.mean(tearsheet[metric])
 
         # Optimize everything
-        res_gp = gp_minimize(objective, space, n_calls=n_calls, random_state=0)
+        res_gp = gp_minimize(
+            objective,
+            space,
+            n_calls=n_calls,
+            random_state=0
+        )
 
         return res_gp
 
-
     def get_args(self):
+        """Return the parameters that the forecaster can take."""
         model_args = getargspec(self.forecaster.model.__class__).args
         forecaster_args = getargspec(self.forecaster.__class__).args
         optimizer_args = getargspec(self.forecaster._optimizer.__class__).args
@@ -118,8 +133,20 @@ class CrossValidator():
 
 
 class FoldGenerator():
+    """Cross-validation fold generator class.
 
+    :param data: the data to perform cv on.
+    :type data: numpy array
+    :param targets: the target time series to forecast.
+    :type targets: list
+    :param lag: forecaster lag
+    :type lag: int
+    :param horizon: the horizon to perform cv on.
+    :type horizon: numpy array
+
+    """
     def __init__(self, data, targets, lag, horizon, test_fraction, n_folds):
+        """Initialize properties."""
         self.data = data
         self.targets = targets
         self.lag = lag
@@ -131,7 +158,7 @@ class FoldGenerator():
         return self.generate_folds()
 
     def generate_folds(self):
-        """Yield a data fold."""
+        """Yields a data fold."""
         # Find the maximum length of all example time series in the dataset.
         data_length = []
         for time_series in self.data:
@@ -175,13 +202,30 @@ class FoldGenerator():
 
 
 class MetricsEvaluator():
+    """Temporal cross-validator class.
 
+    This class performs temporal (causal) cross-validation similar to the
+    approach in https://robjhyndman.com/papers/cv-wp.pdf.
+
+    :param forecaster: Forecaster.
+    :type forecaster: A forecaster class
+    :param fold_generator: Fold generator.
+    :type fold_generator: A fold generator class
+    :param evaluator: Evaluator.
+    :type evaluator: An evaluator class
+    :param scaler: Scaler.
+    :type scaler: A scaler class
+    :param optimizer: Optimizer.
+    :type optimizer: An optimizer class
+    """
     def __init__(self, metrics, filename=None):
+        """Initialize properties."""
         self.metrics = metrics
         self.tearsheet = pd.DataFrame(columns=self.metrics)
         self.filename = filename
 
     def evaluate(self, y_samples, y_truth, verbose=False):
+        """Calculate all the metrics and store them in tearsheet."""
         eval_results = {}
         for metric in self.metrics:
             try:
@@ -199,16 +243,26 @@ class MetricsEvaluator():
             self.to_pickle()
 
     def to_pickle(self):
+        """Store results."""
         self.tearsheet.to_pickle(self.filename)
 
     def reset(self):
+        """Reset internal state."""
         self.tearsheet = pd.DataFrame(columns=self.metrics)
 
 
 class VectorScaler():
-    """Defines a VectorScaler."""
+    """Scaler class.
 
+    Recsales vectors removing mean and dividing by standard deviation
+    on a component basis.
+
+    :param targets: targets in the data that should be rescaled.
+    :type targets: list
+
+    """
     def __init__(self, targets=None):
+        """Initialize properties."""
         self.targets = targets
         self.x_mean = None
         self.x_std = None

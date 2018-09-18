@@ -20,8 +20,9 @@ class ConcreteDropout(Layer):
         srivastava14a.pdf)
         - [MCDropout: Dropout as a Bayesian Approximation: Representing Model
         Uncertainty in Deep Learning](https://arxiv.org/abs/1506.02142)
-        - [Concrete Dropout](https://papers.nips.cc/paper/6949-concrete-dropout.pdf)
-    """    
+        - [Concrete Dropout](https://papers.nips.cc/
+        paper/6949-concrete-dropout.pdf)
+    """
     @interfaces.legacy_dropout_support
     def __init__(self,
                  temporal_dropout=False,
@@ -280,7 +281,7 @@ class AutoRegression(Layer):
         super(AutoRegression, self).build(input_shape)
 
     def call(self, x):
-        return K.sum(x[:,-self.hw:,:] * self.kernel, axis=1) + self.bias
+        return K.sum(x[:, -self.hw:, :] * self.kernel, axis=1) + self.bias
 
     def compute_output_shape(self, input_shape):
         return (input_shape[0], input_shape[2])
