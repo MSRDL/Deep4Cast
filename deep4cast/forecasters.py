@@ -6,12 +6,15 @@ series given as numpy arrays.
 from inspect import getargspec
 
 import numpy as np
+import tensorflow as tf
 import keras.optimizers
 
+from keras.utils.training_utils import multi_gpu_model
 from . import custom_losses
 
 
 class Forecaster():
+
     def __init__(self,
                  model,
                  lag,
@@ -44,7 +47,7 @@ class Forecaster():
         # Boolean checks
         self.is_fitted = False
 
-    def fit(self, X, y, verbose=0):
+    def fit(self, X, y, verbose=0, n_gpus=1):
         """Fit model to data."""
         # Make sure the data type is float32 for optimal performance of all
         # Keras backends.
@@ -67,10 +70,19 @@ class Forecaster():
         # after it has already been fitted
         if not self.is_fitted:
             # Set up the model based on internal model class
-            self.model.build_layers(
-                input_shape=X.shape[1:],
-                output_shape=output_shape
-            )
+            # Support multi-gpu training
+            if n_gpus <= 1:
+                self.model.build_layers(
+                    input_shape=X.shape[1:],
+                    output_shape=output_shape
+                )
+            else:
+                with tf.device("/cpu:0"):
+                    self.model.build_layers(
+                        input_shape=X.shape[1:],
+                        output_shape=output_shape
+                    )
+                self.model = multi_gpu_model(self.model, gpus=n_gpus)
 
             # Keras needs to compile the computational graph before fitting
             self.model.compile(loss=self._loss, optimizer=self._optimizer)
@@ -103,7 +115,7 @@ class Forecaster():
         # Repeat the prediction n_samples times to generate samples from
         # approximate posterior predictive distribution.
         block_size = len(X)
-        X = np.repeat(X, [n_samples]*len(X), axis=0)
+        X = np.repeat(X, [n_samples] * len(X), axis=0)
 
         # Make predictions for parameters of pdfs then sample from pdfs
         predictions = self.model.predict(X, self.batch_size)

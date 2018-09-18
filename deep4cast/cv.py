@@ -87,7 +87,12 @@ class CrossValidator():
 
         return self.evaluator.tearsheet
 
-    def optimize(self, space, metric, n_calls=10, n_samples=1000):
+    def optimize(self,
+                 space,
+                 metric,
+                 n_calls=10,
+                 n_samples=1000,
+                 verbose=False):
         """Optimize the forecaster parameters."""
         args = self.get_args()
 
@@ -106,8 +111,8 @@ class CrossValidator():
                     raise ValueError('{} not a valid argument'.format(key))
 
             # Tearsheet is the summary of this CV run
-            tearsheet = self.evaluate(n_samples=n_samples, verbose=True)
             print(params)
+            tearsheet = self.evaluate(n_samples=n_samples, verbose=verbose)
             print(tearsheet)
 
             # We take the mean value of the tearsheet metric that we care
