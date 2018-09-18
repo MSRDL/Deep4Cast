@@ -70,7 +70,7 @@ class CrossValidator():
                 y_train = self.scaler.fit_transform_y(y_train)
 
             # Quietly fit the forecaster to this fold's training set
-            forecaster.fit(X_train, y_train, verbose=verbose)
+            forecaster.fit(X_train, y_train, verbose=int(verbose))
 
             # Generate predictions
             y_pred_samples = forecaster.predict(X_test, n_samples=n_samples)
@@ -106,7 +106,7 @@ class CrossValidator():
                     raise ValueError('{} not a valid argument'.format(key))
 
             # Tearsheet is the summary of this CV run
-            tearsheet = self.evaluate(n_samples=n_samples, verbose=False)
+            tearsheet = self.evaluate(n_samples=n_samples, verbose=True)
             print(tearsheet)
 
             # We take the mean value of the tearsheet metric that we care
