@@ -23,7 +23,8 @@ class Forecaster():
                  optimizer='adam',
                  batch_size=16,
                  epochs=100,
-                 **kwargs):
+                 n_gpus=1,
+                 ** kwargs):
         """Initialize properties."""
         # Neural network model attributes
         self.model = model  # Neural network architecture (Keras model)
@@ -45,9 +46,10 @@ class Forecaster():
         self.set_optimizer_args(kwargs)
 
         # Boolean checks
+        self.n_gpus = n_gpus
         self.is_fitted = False
 
-    def fit(self, X, y, verbose=0, n_gpus=1):
+    def fit(self, X, y, verbose=0):
         """Fit model to data."""
         # Make sure the data type is float32 for optimal performance of all
         # Keras backends.
@@ -71,7 +73,7 @@ class Forecaster():
         if not self.is_fitted:
             # Set up the model based on internal model class
             # Support multi-gpu training
-            if n_gpus <= 1:
+            if self.n_gpus <= 1:
                 self.model.build_layers(
                     input_shape=X.shape[1:],
                     output_shape=output_shape
@@ -82,7 +84,7 @@ class Forecaster():
                         input_shape=X.shape[1:],
                         output_shape=output_shape
                     )
-                self.model = multi_gpu_model(self.model, gpus=n_gpus)
+                self.model = multi_gpu_model(self.model, gpus=self.n_gpus)
 
             # Keras needs to compile the computational graph before fitting
             self.model.compile(loss=self._loss, optimizer=self._optimizer)
