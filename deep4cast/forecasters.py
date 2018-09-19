@@ -67,7 +67,6 @@ class Forecaster():
 
         # Other
         self.is_fitted = False
-        self.name = ''
 
     def fit(self, X, y, verbose=0):
         """Fit model to data."""
@@ -175,11 +174,8 @@ class Forecaster():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
 
-    def save_model(self):
+    def save_model(self, filename):
         """Save model to JSON file."""
-        filename = str(int(time.time())) + \
-            self.name
-
         # Save model specifications
         model_json = self.model.to_json()
         with open(filename + '.json', 'w') as fid:

@@ -21,6 +21,7 @@ if __name__ == "__main__":
     epochs = 2
     test_fraction = 0.15
     n_folds = 1
+    n_ensemble = 5
 
     # Load the data from file
     df = pd.read_pickle(
@@ -81,13 +82,13 @@ if __name__ == "__main__":
                                fold_generator,
                                evaluator,
                                scaler,
-                               n_ensemble=5)
+                               n_ensemble=n_ensemble)
 
     # Optimization
     space = [Integer(32, 512, name='filters'),
              Integer(1, 6, name='num_layers'),
              Integer(90, 730, name='lag'),
-             Integer(10, 500, name='epochs'),
+             Integer(1, 500, name='epochs'),
              Integer(4, 128, name='batch_size'),
              Real(10**-5, 10**-3, "log-uniform", name='lr')]
 

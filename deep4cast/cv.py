@@ -57,6 +57,7 @@ class CrossValidator():
 
         # Other args
         self.n_ensemble = n_ensemble
+        self.params_str = None
 
     def evaluate(self, n_samples=1000, verbose=True):
         """Evaluate forecaster."""
@@ -81,8 +82,10 @@ class CrossValidator():
                 forecaster.fit(X_tr, y_tr, verbose=int(verbose))
 
                 # Store the forecaster
-                forecaster.name += '_init{}_fold{}'.format(i, j)
-                forecaster.save_model()
+                filename = 'checkpoint_fold_{}_init_{}'.format(i, j)
+                if self.params_str:
+                    filename += '_' + self.params_str
+                forecaster.save_model(filename)
 
                 # Generate predictions
                 y_pred_samples = forecaster.predict(
@@ -137,11 +140,9 @@ class CrossValidator():
                     setattr(self.fold_generator, key, value)
 
             # Tearsheet is the summary of this CV run
-            params_str = '_'.join([''.join(map(str, k))
+            self.params_str = '_'.join([''.join(map(str, k))
                                    for k in params.items()])
-            print('Trying parameters: ' + params_str)
-
-            self.forecaster.name += '_' + params_str
+            print('Trying parameters: ' + self.params_str)
             tearsheet = self.evaluate(n_samples=n_samples, verbose=verbose)
 
             # We take the mean value of the tearsheet metric that we care
