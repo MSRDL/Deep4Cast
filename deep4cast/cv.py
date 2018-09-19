@@ -18,6 +18,7 @@ from skopt import gp_minimize
 __MODEL_ARGS__ = ['filters', 'num_layers']
 __OPTIMIZER_ARGS__ = ['lr']
 __FORECASTER_ARGS__ = ['epochs', 'batch_size', 'lag']
+__FOLD_GEN_ARGS__ = ['lag']
 
 
 class CrossValidator():
@@ -43,45 +44,66 @@ class CrossValidator():
                  fold_generator,
                  evaluator,
                  scaler=None,
-                 optimizer=None):
+                 optimizer=None,
+                 n_ensemble=1):
         """Initialize properties."""
         self.forecaster = forecaster
-        self.fold_generator = fold_generator  # Must be a generator
+        self.fold_generator = fold_generator
         self.evaluator = evaluator
         self.scaler = scaler
 
         # Optimizer arguments
         self.space = None
 
+        # Other args
+        self.n_ensemble = n_ensemble
+
     def evaluate(self, n_samples=1000, verbose=True):
         """Evaluate forecaster."""
         self.evaluator.reset()  # Make sure we have a clean evaluator
 
-        for X_train, X_test, y_train, y_test in self.fold_generator():
-            # Set up the forecaster
-            forecaster = self.forecaster
-            forecaster.is_fitted = False  # Make sure we refit the forecaster
-            t0 = time.time()
+        for i, (X_tr, X_te, y_tr, y_te) in enumerate(self.fold_generator()):
+            # Loop over random initializations (ensemble)
+            y_ens_samples = []
+            for j in range(self.n_ensemble):
+                # Set up the forecaster
+                forecaster = self.forecaster
+                forecaster.is_fitted = False  # Make sure we refit
+                t0 = time.time()
 
-            # Transform the data
+                # Transform the data
+                if self.scaler:
+                    X_tr = self.scaler.fit_transform_x(X_tr)
+                    X_te = self.scaler.transform_x(X_te)
+                    y_tr = self.scaler.fit_transform_y(y_tr)
+
+                # Quietly fit the forecaster to this fold's training set
+                forecaster.fit(X_tr, y_tr, verbose=int(verbose))
+
+                # Store the forecaster
+                forecaster.name += '_init{}_fold{}'.format(i, j)
+                forecaster.save_model()
+
+                # Generate predictions
+                y_pred_samples = forecaster.predict(
+                    X_te,
+                    n_samples=n_samples
+                )
+
+                # Append prediction samples to ensemble samples
+                y_ens_samples.append(y_pred_samples)
+
+            # Put samples from all initializations together
+            y_ens_samples = np.concatenate(y_ens_samples, axis=0)
+
+            # Transform the samples back to original scales
             if self.scaler:
-                X_train = self.scaler.fit_transform_x(X_train)
-                X_test = self.scaler.transform_x(X_test)
-                y_train = self.scaler.fit_transform_y(y_train)
-
-            # Quietly fit the forecaster to this fold's training set
-            forecaster.fit(X_train, y_train, verbose=int(verbose))
-
-            # Generate predictions
-            y_pred_samples = forecaster.predict(X_test, n_samples=n_samples)
-
-            # Transform the samples back
-            if self.scaler:
-                y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples
-                                                                 )
+                y_ens_samples = self.scaler.inverse_transform_y(
+                    y_ens_samples
+                )
 
             # Evaluate forecaster performance
-            self.evaluator.evaluate(y_pred_samples, y_test, verbose=verbose)
+            self.evaluator.evaluate(y_ens_samples, y_te, verbose=verbose)
             if verbose:
                 print('Evaluation took {} seconds.'.format(time.time() - t0))
 
@@ -110,14 +132,24 @@ class CrossValidator():
                 else:
                     raise ValueError('{} not a valid argument'.format(key))
 
+                # Need to make sure we adjust the fold generator for lags
+                if key in args['forecaster'] and key in __FOLD_GEN_ARGS__:
+                    setattr(self.fold_generator, key, value)
+
             # Tearsheet is the summary of this CV run
-            print(params)
+            params_str = '_'.join([''.join(map(str, k))
+                                   for k in params.items()])
+            print('Trying parameters: ' + params_str)
+
+            self.forecaster.name += '_' + params_str
             tearsheet = self.evaluate(n_samples=n_samples, verbose=verbose)
-            print(tearsheet)
 
             # We take the mean value of the tearsheet metric that we care
             # about as optimization objective
-            return np.mean(tearsheet[metric])
+            score = np.mean(tearsheet[metric])
+            print('Optimization score: {}'.format(score))
+
+            return score
 
         # Optimize everything
         res_gp = gp_minimize(
@@ -196,19 +228,19 @@ class FoldGenerator():
             data_test = np.array(data_test)
 
             # Sequentialize dataset
-            X_train, y_train = utils.sequentialize(
+            X_tr, y_tr = utils.sequentialize(
                 data_train,
                 self.lag,
                 self.horizon,
                 targets=self.targets
             )
-            X_test, y_test = utils.sequentialize(
+            X_te, y_te = utils.sequentialize(
                 data_test,
                 self.lag,
                 self.horizon,
                 targets=self.targets
             )
-            yield X_train, X_test, y_train, y_test
+            yield X_tr, X_te, y_tr, y_te
 
 
 class MetricsEvaluator():

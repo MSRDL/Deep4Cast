@@ -2,6 +2,8 @@
 __*/
 .bin/
 .idea/
+*.h5
+*.json
 *.pptx
 *.ppt
 *.docx

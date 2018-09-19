@@ -5,15 +5,36 @@ series given as numpy arrays.
 """
 from inspect import getargspec
 
+import time
 import numpy as np
-import tensorflow as tf
 import keras.optimizers
 
-from keras.utils.training_utils import multi_gpu_model
+from keras.callbacks import TerminateOnNaN
+from keras.models import model_from_json
 from . import custom_losses
 
 
 class Forecaster():
+    """Forecaster class.
+
+    This class fits a neural network model to a dataset.
+
+    :param model: model.
+    :type model: A model class
+    :param lag: Lookback window.
+    :type lag: int
+    :param horizon: length of forecasting horizon.
+    :type horizon: int
+    :param loss: training loss.
+    :type loss: string
+    :param optimizer: Optimizer.
+    :type optimizer: string
+    :param batch_size: training and prediction batch_size.
+    :type batch_size: int
+    :param epochs: Number of training epochs.
+    :type epochs: int
+
+    """
 
     def __init__(self,
                  model,
@@ -23,7 +44,6 @@ class Forecaster():
                  optimizer='adam',
                  batch_size=16,
                  epochs=100,
-                 n_gpus=1,
                  ** kwargs):
         """Initialize properties."""
         # Neural network model attributes
@@ -45,9 +65,9 @@ class Forecaster():
                 raise ValueError('{} not a valid argument.'.format(key))
         self.set_optimizer_args(kwargs)
 
-        # Boolean checks
-        self.n_gpus = n_gpus
+        # Other
         self.is_fitted = False
+        self.name = ''
 
     def fit(self, X, y, verbose=0):
         """Fit model to data."""
@@ -73,18 +93,10 @@ class Forecaster():
         if not self.is_fitted:
             # Set up the model based on internal model class
             # Support multi-gpu training
-            if self.n_gpus <= 1:
-                self.model.build_layers(
-                    input_shape=X.shape[1:],
-                    output_shape=output_shape
-                )
-            else:
-                with tf.device("/cpu:0"):
-                    self.model.build_layers(
-                        input_shape=X.shape[1:],
-                        output_shape=output_shape
-                    )
-                self.model = multi_gpu_model(self.model, gpus=self.n_gpus)
+            self.model.build_layers(
+                input_shape=X.shape[1:],
+                output_shape=output_shape
+            )
 
             # Keras needs to compile the computational graph before fitting
             self.model.compile(loss=self._loss, optimizer=self._optimizer)
@@ -95,6 +107,7 @@ class Forecaster():
             y,
             batch_size=self.batch_size,
             epochs=self.epochs,
+            callbacks=[TerminateOnNaN()],
             verbose=verbose,
         )
 
@@ -161,3 +174,27 @@ class Forecaster():
         for key, value in params.items():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
+
+    def save_model(self):
+        """Save model to JSON file."""
+        filename = str(int(time.time())) + \
+            self.name
+
+        # Save model specifications
+        model_json = self.model.to_json()
+        with open(filename + '.json', 'w') as fid:
+            fid.write(model_json)
+
+        # Save model weights
+        self.model.save_weights(filename + '.h5')
+        print('Saved model at {}.'.format(filename))
+
+    def load_model(self, filename):
+        """Load model from JSON."""
+        # Load model specifications
+        with open(filename + '.json', 'r') as fid:
+            self.model = model_from_json(fid.read())
+        fid.close()
+
+        # Load weights into model
+        self.model.load_weights(filename + '.h5')
