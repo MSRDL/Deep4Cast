@@ -148,6 +148,10 @@ class CrossValidator():
             # We take the mean value of the tearsheet metric that we care
             # about as optimization objective
             score = np.mean(tearsheet[metric])
+
+            # Make sure NaNs are not a problem
+            if score == np.nan:
+                score = 1e12
             print('Optimization score: {}'.format(score))
 
             return score

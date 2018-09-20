@@ -8,7 +8,7 @@ import deep4cast.models as models
 
 from deep4cast.forecasters import Forecaster
 from deep4cast.cv import FoldGenerator, VectorScaler, MetricsEvaluator, CrossValidator
-from skopt.space import Real, Integer
+from skopt.space import Real, Integer, Categorical
 
 
 if __name__ == "__main__":
@@ -85,11 +85,11 @@ if __name__ == "__main__":
                                n_ensemble=n_ensemble)
 
     # Optimization
-    space = [Integer(32, 512, name='filters'),
-             Integer(1, 6, name='num_layers'),
-             Integer(90, 730, name='lag'),
+    space = [Categorical([32, 64, 128, 256, 512], name='filters'),
+             Integer(1, 4, name='num_layers'),
+             Integer(90, 360, name='lag'),
              Integer(1, 500, name='epochs'),
-             Integer(4, 128, name='batch_size'),
+             Categorical(4, 8, 16, 32, 64, 128, name='batch_size'),
              Real(10**-5, 10**-3, "log-uniform", name='lr')]
 
     opt_results = validator.optimize(space, 'pinball_loss', n_calls=50)
