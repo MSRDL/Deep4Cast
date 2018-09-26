@@ -72,20 +72,34 @@ class CrossValidator():
             # Quietly fit the forecaster to this fold's training set
             forecaster.fit(X_train, y_train, verbose=0)
 
-            # Generate predictions
-            y_pred_samples = forecaster.predict(X_test, n_samples=n_samples)
+            # Generate predictions but only on necessary data points
+            y_pred_samples = forecaster.predict(
+                X_test[::self.forecaster.horizon],
+                n_samples=n_samples
+                )
 
             # Transform the samples back
             y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples)
 
+            # Reformat samples for evaluation into time series format
+            eval_samples = []
+            for i in range(y_pred_samples.shape[1]):
+                eval_samples.append(y_pred_samples[:, i, :, :])
+            eval_samples = np.concatenate(eval_samples, axis=1)
+
+            # Reformat the data into time series forcast for evaluation
+            y_eval = y_test[::self.forecaster.horizon]
+            y_eval = np.reshape(y_eval, y_eval.shape[0] * y_eval.shape[1])
+            y_eval = np.atleast_2d(y_eval).T
+
             # Evaluate forecaster performance
-            self.evaluator.evaluate(y_pred_samples, y_test, verbose=verbose)
+            self.evaluator.evaluate(eval_samples, y_eval, verbose=verbose)
             if verbose:
                 print('Evaluation took {} seconds.'.format(time.time() - t0))
 
         return self.evaluator.tearsheet
 
-    def optimize(self, space, metric, n_calls=2, n_samples=1000):
+    def optimize(self, space, metric, n_calls=10, n_samples=1000):
         """Optimize the forecaster parameters."""
         args = self.get_args()
 
@@ -104,7 +118,9 @@ class CrossValidator():
                     raise ValueError('{} not a valid argument'.format(key))
 
             # Tearsheet is the summary of this CV run
+            print(params)
             tearsheet = self.evaluate(n_samples=n_samples, verbose=False)
+            print(np.mean(tearsheet[metric]))
 
             # We take the mean value of the tearsheet metric that we care
             # about as optimization objective

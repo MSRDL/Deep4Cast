@@ -12,6 +12,11 @@ from . import custom_losses
 
 
 class Forecaster():
+    """Forecaster class.
+
+    Take a keras model and builds a forecaster.
+
+    """
     def __init__(self,
                  model,
                  lag,
@@ -111,10 +116,11 @@ class Forecaster():
 
         # Reorganize prediction samples into 3D array
         reshuffled_predictions = []
-        for i in range(n_samples):
-            block = predictions[i * block_size:(i + 1) * block_size]
+        for i in range(block_size):
+            block = predictions[i * n_samples:(i + 1) * n_samples]
+            block = np.expand_dims(block, axis=1)
             reshuffled_predictions.append(block)
-        predictions = np.array(reshuffled_predictions)
+        predictions = np.concatenate(reshuffled_predictions, axis=1)
 
         return predictions
 

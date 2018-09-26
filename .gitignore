@@ -12,6 +12,7 @@ __*/
 # Data files
 #/data
 #*.csv
+*.pkl
 *.tsv
 *.xlsx
 *.xls
