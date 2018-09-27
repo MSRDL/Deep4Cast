@@ -18,6 +18,7 @@ from skopt import gp_minimize
 __MODEL_ARGS__ = ['filters', 'num_layers']
 __OPTIMIZER_ARGS__ = ['lr']
 __FORECASTER_ARGS__ = ['epochs', 'batch_size', 'lag']
+__FOLD_GENERATOR_ARGS__ = ['lag']
 
 
 class CrossValidator():
@@ -60,7 +61,7 @@ class CrossValidator():
         for X_train, X_test, y_train, y_test in self.fold_generator():
             # Set up the forecaster
             forecaster = self.forecaster
-            forecaster._is_fitted = False  # Make sure we refit the forecaster
+            forecaster.is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
 
             # Transform the data
@@ -116,6 +117,8 @@ class CrossValidator():
                     setattr(self.forecaster, key, value)
                 else:
                     raise ValueError('{} not a valid argument'.format(key))
+                if key in __FOLD_GENERATOR_ARGS__:
+                    setattr(self.fold_generator, key, value)
 
             # Tearsheet is the summary of this CV run
             print(params)
