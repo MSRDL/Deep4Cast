@@ -1,4 +1,9 @@
-# Deep4cast 
+@Toby:
+- Almost never check in binary files
+- Code that is outside the scope of the library (e.g. `process_blah.py` should be in the example notebooks). Personal code should have `personal` in the filename so that it's ignored by git.
+- `requirements.txt` contained too many packages. It should contain a minimal set of required packages.
+
+# Deep4cast
 
 ***This package is under development.***
 
