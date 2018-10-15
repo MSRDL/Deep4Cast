@@ -15,21 +15,19 @@ $ python setup.py install
 ```
 
 ### Main Requirements
-```
 - [python](http://python.org) - version 3.6
 - [tensorflow](https://www.tensorflow.org/)
 - [keras](https://keras.io/)
 - [scikit-optimize](https://github.com/scikit-optimize/scikit-optimize)
-```
 
 ## Examples
--[Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/tree/master/examples)
+- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/tree/master/examples)
 
 ## Authors
 - [Toby Bischoff](http://github.com/bischtob)
-- [Austin Gross]
-- [Shirley Ren]
-- [Richard Johnston]
-- [Will Wang]
-- [Kenneth Tran]
+- Austin Gross
+- Shirley Ren
+- Richard Johnston
+- Will Wang
+- Kenneth Tran
 
