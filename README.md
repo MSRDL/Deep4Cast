@@ -1,6 +1,6 @@
 # Deep4cast: Neural Networks for Time Series Modeling
 
-<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/master/doc/images/cover.png" height=200>
+<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/toby/doc/images/cover.png" height=200>
 
 ***This package is under active development. Things may change :-).***
 
