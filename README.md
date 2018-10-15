@@ -1,5 +1,7 @@
 # Deep4cast: Neural Networks for Time Series Modeling
 
+<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/master/doc/images/cover.png" height=200>
+
 ***This package is under active development. Things may change :-).***
 
 ```Deep4cast``` is a scalable machine learning package implemented in Python. It has a front-end API designed to be similar to scikit-learn, but is based on Keras. It was designed for medium to large size time series data sets and allows for modeling of forecast uncertainties via Monte Carlo Dropout.
@@ -21,7 +23,7 @@ $ python setup.py install
 - [scikit-optimize](https://github.com/scikit-optimize/scikit-optimize)
 
 ## Examples
-- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/tree/master/examples)
+- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)
 
 ## Authors
 - [Toby Bischoff](http://github.com/bischtob)
