@@ -20,7 +20,6 @@ __OPTIMIZER_ARGS__ = ['lr']
 __FORECASTER_ARGS__ = ['epochs', 'batch_size', 'lag']
 __FOLD_GENERATOR_ARGS__ = ['lag']
 
-
 class CrossValidator():
     """Temporal cross-validator class.
 
@@ -61,7 +60,6 @@ class CrossValidator():
         for X_train, X_test, y_train, y_test in self.fold_generator():
             # Set up the forecaster
             forecaster = self.forecaster
-            forecaster.is_fitted = False  # Make sure we refit the forecaster
             t0 = time.time()
 
             # Transform the data
@@ -105,7 +103,7 @@ class CrossValidator():
         args = self.get_args()
 
         @use_named_args(space)
-        def objective(**params):
+        def objective(**params): 
             """This is the function that we build fgor the optimizer to
             optimizer."""
             for key, value in params.items():
@@ -119,6 +117,9 @@ class CrossValidator():
                     raise ValueError('{} not a valid argument'.format(key))
                 if key in __FOLD_GENERATOR_ARGS__:
                     setattr(self.fold_generator, key, value)
+
+            # Make sure the forecaster is refitted and reset
+            self.forecaster.reset()
 
             # Tearsheet is the summary of this CV run
             print(params)

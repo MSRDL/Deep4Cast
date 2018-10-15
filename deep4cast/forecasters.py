@@ -19,8 +19,6 @@ class Forecaster():
     """
     def __init__(self,
                  model,
-                 lag,
-                 horizon,
                  loss='heteroscedastic_gaussian',
                  optimizer='adam',
                  batch_size=16,
@@ -29,8 +27,6 @@ class Forecaster():
         """Initialize properties."""
         # Neural network model attributes
         self.model = model  # Neural network architecture (Keras model)
-        self.lag = lag   # Lookback window (length of input)
-        self.horizon = horizon  # Forecasting horizon (length of output)
 
         # Optimizer attributes
         self.optimizer = optimizer
@@ -39,15 +35,15 @@ class Forecaster():
         self.loss = loss
         self.history = None
 
-        # Configure optimizer
+        # Configure optimizer 
         allowed_kwargs = self.get_optimizer_args()
         for key, value in kwargs.items():
             if key not in allowed_kwargs:
                 raise ValueError('{} not a valid argument.'.format(key))
         self.set_optimizer_args(kwargs)
 
-        # Boolean checks
-        self.is_fitted = False
+        # Boolean checks for refitting
+        self._is_fitted = False
 
     def fit(self, X, y, verbose=0):
         """Fit model to data."""
@@ -90,14 +86,16 @@ class Forecaster():
         )
 
         # Change state to fitted so that other methods work correctly
-        self.is_fitted = True
+        self._is_fitted = True
 
     def predict(self, X, n_samples=1000):
         """Generate predictions for input time series numpy array.
+
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
         :param n_samples: Number of prediction samples (>= 1).
         :type n_samples: int
+
         """
         # Check if model is actually fitted
         self.check_is_fitted()
@@ -126,12 +124,16 @@ class Forecaster():
 
     def check_is_fitted(self):
         """Raise error if model has not been fitted to data."""
-        if not self.is_fitted:
+        if not self._is_fitted:
             raise ValueError('The model has not been fitted.')
+
+    def reset(self):
+        """Reset model for refitting."""
+        self._is_fitted = False
 
     @property
     def optimizer(self):
-        """Return the optimizer name."""
+        """Return the optimizer name only."""
         return self._optimizer.__class__.__name__
 
     @optimizer.setter
@@ -153,3 +155,73 @@ class Forecaster():
         for key, value in params.items():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
+
+class VectorScaler():
+    """Scaler class.
+
+    Recsales vectors removing mean and dividing by standard deviation
+    on a component basis.
+
+    :param targets: targets in the data that should be rescaled.
+    :type targets: list
+
+    """
+
+    def __init__(self, targets=None):
+        """Initialize properties."""
+        self.targets = targets
+        self.x_mean = None
+        self.x_std = None
+        self.x_is_fitted = False
+        self.y_mean = None
+        self.y_std = None
+        self.y_is_fitted = False
+
+    def fit_x(self, X):
+        """Fit the scaler."""
+        if self.targets is None:
+            mean = np.mean(X, axis=0)
+            std = np.std(X, axis=0)
+        else:
+            # Need to concatenate mean with zeros and stds with ones for
+            # categorical targets
+            mean = np.zeros(X.shape[1:])
+            std = np.ones(X.shape[1:])
+            mean[:, self.targets] = np.mean(X[:, :, self.targets], axis=0)
+            std[:, self.targets] = np.std(X[:, :, self.targets], axis=0)
+
+        self.x_mean = mean
+        self.x_std = std
+        self.x_is_fitted = True
+
+    def fit_y(self, y):
+        """Fit the scaler."""
+        self.y_mean = np.mean(y, axis=0)
+        self.y_std = np.std(y, axis=0)
+        self.y_is_fitted = True
+
+    def transform_x(self, X):
+        return (X - self.x_mean) / self.x_std
+
+    def transform_y(self, y):
+        return (y - self.y_mean) / self.y_std
+
+    def fit_transform_x(self, X):
+        self.fit_x(X)
+        return self.transform_x(X)
+
+    def fit_transform_y(self, y):
+        self.fit_y(y)
+        return self.transform_y(y)
+
+    def inverse_transform_x(self, X):
+        if self.x_is_fitted:
+            return X * self.x_std + self.x_mean
+        else:
+            raise ValueError('Not fitted on X.')
+
+    def inverse_transform_y(self, y):
+        if self.y_is_fitted:
+            return y * self.y_std + self.y_mean
+        else:
+            raise ValueError('Not fitted on y.')

@@ -10,8 +10,9 @@ class mse():
     """
     Probabilistic loss function class that implements keras log-
     likelhood loss and sampling from pdf for regular mean-squared error loss.
-    This mean, there is not much to do here as it behaves like a Gaussian
+    This means that there is not much to do here as it behaves like a Gaussian
     with zero variance.
+
     """
 
     def __init__(self, **kwargs):
@@ -36,6 +37,7 @@ class mae():
     likelhood loss and sampling from pdf for regular mean-absolute error loss.
     This mean, there is not much to do here as it behaves like a Laplacian
     with zero variance.
+
     """
 
     def __init__(self, **kwargs):
@@ -60,6 +62,7 @@ class heteroscedastic_gaussian():
     likelhood loss and sampling from pdf for a heteroscedastic Gaussian.
     :param n_dim: dimensionality of the samples.
     :type n_dim: int
+    
     """
 
     def __init__(self, **kwargs):
