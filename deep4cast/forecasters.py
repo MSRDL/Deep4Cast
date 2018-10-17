@@ -66,7 +66,7 @@ class Forecaster():
 
         # Need to handle the case where the model is fitted for more epochs
         # after it has already been fitted
-        if not self.is_fitted:
+        if not self._is_fitted:
             # Set up the model based on internal model class
             self.model.build_layers(
                 input_shape=X.shape[1:],

@@ -1,6 +1,8 @@
 import pandas as pd
 import argparse
 
+from pandas.tseries.holiday import USFederalHolidayCalendar as calendar
+
 
 def prepare_data(data_path):
     """Returns dataframe with features."""
@@ -8,20 +10,14 @@ def prepare_data(data_path):
     # Get data
     df = pd.read_csv(data_path)
 
-    # Convert date to datetime
-    df['date'] = pd.to_datetime(df.date)
-    df = df.set_index('date').resample('B').last()
-
-    # Drop NaNs
+    # Remove NaNs
     df = df.dropna()
 
-    # Moving averages
-    df['200_day_ma'] = df.close_price.rolling(window=200).mean()
-    df['50_day_ma'] = df.close_price.rolling(window=50).mean()
+    # Convert date to datetime
+    df['date'] = pd.to_datetime(df.date)
 
-    # Create a return field
-    df['return'] = df['close_price'].pct_change()
-    df = df.reset_index()
+    # Create and age variable
+    df['age'] = df.index.astype('int')
 
     # Create a day of week field
     df['day'] = df.date.dt.dayofweek
@@ -29,16 +25,19 @@ def prepare_data(data_path):
     # Create a month of year field
     df['month'] = df.date.dt.month
 
+    # Create a boolean for US federal holidays
+    holidays = calendar().holidays(start=df.date.min(), end=df.date.max())
+    df['holiday'] = df['date'].isin(holidays).apply(int)
+
     # Rearrange columns
     df = df[
         [
             'date',
-            'close_price',
-            '200_day_ma',
-            '50_day_ma',
-            'return',
+            'count',
+            'age',
             'month',
-            'day'
+            'day',
+            'holiday'
         ]
     ]
 

@@ -29,7 +29,5 @@ $ python setup.py install
 - [Toby Bischoff](http://github.com/bischtob)
 - Austin Gross
 - Shirley Ren
-- Richard Johnston
-- Will Wang
 - Kenneth Tran
 

@@ -14,11 +14,11 @@ from inspect import getargspec
 from skopt.utils import use_named_args
 from skopt import gp_minimize
 
-
-__MODEL_ARGS__ = ['filters', 'num_layers']
-__OPTIMIZER_ARGS__ = ['lr']
-__FORECASTER_ARGS__ = ['epochs', 'batch_size', 'lag']
 __FOLD_GENERATOR_ARGS__ = ['lag']
+__MODEL_ARGS__ = ['filters', 'units', 'num_layers']
+__FORECASTER_ARGS__ = ['epochs', 'batch_size']
+__OPTIMIZER_ARGS__ = ['lr']
+
 
 class CrossValidator():
     """Temporal cross-validator class.
@@ -73,9 +73,9 @@ class CrossValidator():
 
             # Generate predictions but only on necessary data points
             y_pred_samples = forecaster.predict(
-                X_test[::self.forecaster.horizon],
+                X_test[::self.fold_generator.horizon],
                 n_samples=n_samples
-                )
+            )
 
             # Transform the samples back
             y_pred_samples = self.scaler.inverse_transform_y(y_pred_samples)
@@ -87,7 +87,7 @@ class CrossValidator():
             eval_samples = np.concatenate(eval_samples, axis=1)
 
             # Reformat the data into time series forcast for evaluation
-            y_eval = y_test[::self.forecaster.horizon]
+            y_eval = y_test[::self.fold_generator.horizon]
             y_eval = np.reshape(y_eval, y_eval.shape[0] * y_eval.shape[1])
             y_eval = np.atleast_2d(y_eval).T
 
@@ -103,11 +103,13 @@ class CrossValidator():
         args = self.get_args()
 
         @use_named_args(space)
-        def objective(**params): 
+        def objective(**params):
             """This is the function that we build fgor the optimizer to
             optimizer."""
             for key, value in params.items():
-                if key in args['model'] and key in __MODEL_ARGS__:
+                if key in args['fold_generator'] and key in __FOLD_GENERATOR_ARGS__:
+                    setattr(self.fold_generator, key, value)
+                elif key in args['model'] and key in __MODEL_ARGS__:
                     setattr(self.forecaster.model, key, value)
                 elif key in args['optimizer'] and key in __OPTIMIZER_ARGS__:
                     setattr(self.forecaster._optimizer, key, value)
@@ -115,8 +117,6 @@ class CrossValidator():
                     setattr(self.forecaster, key, value)
                 else:
                     raise ValueError('{} not a valid argument'.format(key))
-                if key in __FOLD_GENERATOR_ARGS__:
-                    setattr(self.fold_generator, key, value)
 
             # Make sure the forecaster is refitted and reset
             self.forecaster.reset()
@@ -142,10 +142,12 @@ class CrossValidator():
 
     def get_args(self):
         """Return the parameters that the forecaster can take."""
+        fold_generator_args = getargspec(self.fold_generator.__class__).args
         model_args = getargspec(self.forecaster.model.__class__).args
         forecaster_args = getargspec(self.forecaster.__class__).args
         optimizer_args = getargspec(self.forecaster._optimizer.__class__).args
         return {
+            'fold_generator': fold_generator_args,
             'model': model_args,
             'forecaster': forecaster_args,
             'optimizer': optimizer_args
@@ -154,15 +156,6 @@ class CrossValidator():
 
 class FoldGenerator():
     """Cross-validation fold generator class.
-
-    :param data: the data to perform cv on.
-    :type data: numpy array
-    :param targets: the target time series to forecast.
-    :type targets: list
-    :param lag: forecaster lag
-    :type lag: int
-    :param horizon: the horizon to perform cv on.
-    :type horizon: numpy array
 
     """
 
@@ -223,21 +216,10 @@ class FoldGenerator():
 
 
 class MetricsEvaluator():
-    """Temporal cross-validator class.
+    """Metrics evaluator  class.
 
-    This class performs temporal (causal) cross-validation similar to the
-    approach in https://robjhyndman.com/papers/cv-wp.pdf.
+    Evaluates a list of metrics on a dataset.
 
-    :param forecaster: Forecaster.
-    :type forecaster: A forecaster class
-    :param fold_generator: Fold generator.
-    :type fold_generator: A fold generator class
-    :param evaluator: Evaluator.
-    :type evaluator: An evaluator class
-    :param scaler: Scaler.
-    :type scaler: A scaler class
-    :param optimizer: Optimizer.
-    :type optimizer: An optimizer class
     """
 
     def __init__(self, metrics, filename=None):
@@ -271,74 +253,3 @@ class MetricsEvaluator():
     def reset(self):
         """Reset internal state."""
         self.tearsheet = pd.DataFrame(columns=self.metrics)
-
-
-class VectorScaler():
-    """Scaler class.
-
-    Recsales vectors removing mean and dividing by standard deviation
-    on a component basis.
-
-    :param targets: targets in the data that should be rescaled.
-    :type targets: list
-
-    """
-
-    def __init__(self, targets=None):
-        """Initialize properties."""
-        self.targets = targets
-        self.x_mean = None
-        self.x_std = None
-        self.x_is_fitted = False
-        self.y_mean = None
-        self.y_std = None
-        self.y_is_fitted = False
-
-    def fit_x(self, X):
-        """Fit the scaler."""
-        if self.targets is None:
-            mean = np.mean(X, axis=0)
-            std = np.std(X, axis=0)
-        else:
-            # Need to concatenate mean with zeros and stds with ones for
-            # categorical targets
-            mean = np.zeros(X.shape[1:])
-            std = np.ones(X.shape[1:])
-            mean[:, self.targets] = np.mean(X[:, :, self.targets], axis=0)
-            std[:, self.targets] = np.std(X[:, :, self.targets], axis=0)
-
-        self.x_mean = mean
-        self.x_std = std
-        self.x_is_fitted = True
-
-    def fit_y(self, y):
-        """Fit the scaler."""
-        self.y_mean = np.mean(y, axis=0)
-        self.y_std = np.std(y, axis=0)
-        self.y_is_fitted = True
-
-    def transform_x(self, X):
-        return (X - self.x_mean) / self.x_std
-
-    def transform_y(self, y):
-        return (y - self.y_mean) / self.y_std
-
-    def fit_transform_x(self, X):
-        self.fit_x(X)
-        return self.transform_x(X)
-
-    def fit_transform_y(self, y):
-        self.fit_y(y)
-        return self.transform_y(y)
-
-    def inverse_transform_x(self, X):
-        if self.x_is_fitted:
-            return X * self.x_std + self.x_mean
-        else:
-            raise ValueError('Not fitted on X.')
-
-    def inverse_transform_y(self, y):
-        if self.y_is_fitted:
-            return y * self.y_std + self.y_mean
-        else:
-            raise ValueError('Not fitted on y.')
