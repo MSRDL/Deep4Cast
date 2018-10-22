@@ -62,7 +62,7 @@ class heteroscedastic_gaussian():
     likelhood loss and sampling from pdf for a heteroscedastic Gaussian.
     :param n_dim: dimensionality of the samples.
     :type n_dim: int
-    
+
     """
 
     def __init__(self, **kwargs):

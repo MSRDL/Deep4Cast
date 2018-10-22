@@ -8,6 +8,7 @@ from inspect import getargspec
 import numpy as np
 import keras.optimizers
 
+from keras.callbacks import TerminateOnNaN
 from . import custom_losses
 
 
@@ -17,6 +18,7 @@ class Forecaster():
     Take a keras model and builds a forecaster.
 
     """
+
     def __init__(self,
                  model,
                  loss='heteroscedastic_gaussian',
@@ -35,7 +37,7 @@ class Forecaster():
         self.loss = loss
         self.history = None
 
-        # Configure optimizer 
+        # Configure optimizer
         allowed_kwargs = self.get_optimizer_args()
         for key, value in kwargs.items():
             if key not in allowed_kwargs:
@@ -82,6 +84,7 @@ class Forecaster():
             y,
             batch_size=self.batch_size,
             epochs=self.epochs,
+            callbacks=[TerminateOnNaN()],
             verbose=verbose,
         )
 
@@ -90,7 +93,6 @@ class Forecaster():
 
     def predict(self, X, n_samples=1000):
         """Generate predictions for input time series numpy array.
-
         :param data: Time series array of shape (n_steps, n_variables).
         :type data: numpy.array
         :param n_samples: Number of prediction samples (>= 1).
@@ -106,7 +108,7 @@ class Forecaster():
         # Repeat the prediction n_samples times to generate samples from
         # approximate posterior predictive distribution.
         block_size = len(X)
-        X = np.repeat(X, [n_samples]*len(X), axis=0)
+        X = np.repeat(X, [n_samples] * len(X), axis=0)
 
         # Make predictions for parameters of pdfs then sample from pdfs
         predictions = self.model.predict(X, self.batch_size)
@@ -155,6 +157,7 @@ class Forecaster():
         for key, value in params.items():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
+
 
 class VectorScaler():
     """Scaler class.

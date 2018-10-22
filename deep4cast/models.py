@@ -5,6 +5,7 @@ This module provides access to neural network topologies that can be used
 inside forecasters.
 
 """
+
 import numpy as np
 import keras.layers
 from keras.models import Model
