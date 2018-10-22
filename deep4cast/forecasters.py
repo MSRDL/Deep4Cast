@@ -1,16 +1,14 @@
-# -*- coding: utf-8 -*-
 """Time series forecasting module.
 This module provides access to forecasters that can be fit multivariate time
 series given as numpy arrays.
 """
 from inspect import getargspec
-
+from typing import Union
 import numpy as np
 import keras.optimizers
 
 from keras.callbacks import TerminateOnNaN
-from . import custom_losses
-
+from . import loss_functions
 
 class Forecaster():
     """Forecaster class.
@@ -20,22 +18,29 @@ class Forecaster():
     """
 
     def __init__(self,
-                 model,
-                 loss='heteroscedastic_gaussian',
+                 model: Union[str, keras.Model],
+                 loss: Union[str, loss_functions.Loss]='gaussian',
                  optimizer='adam',
                  batch_size=16,
                  epochs=100,
                  **kwargs):
         """Initialize properties."""
         # Neural network model attributes
-        self.model = model  # Neural network architecture (Keras model)
+        # REVIEW Toby: Can't model be a string, similar to loss?
+        self.model = model
 
         # Optimizer attributes
         self.optimizer = optimizer
         self.batch_size = batch_size
         self.epochs = epochs
-        self.loss = loss
         self.history = None
+        if isinstance(loss, str):
+            self._loss = getattr(loss_functions, loss)(
+                n_dim=y.shape[2]
+            )
+        else:
+            assert isinstance(loss, loss_functions.Loss)
+            self._loss = loss
 
         # Configure optimizer
         allowed_kwargs = self.get_optimizer_args()
@@ -54,15 +59,6 @@ class Forecaster():
         X = X.astype('float32')
         y = y.astype('float32')
 
-        # Prepare model output shape based on loss function type to handle
-        # loss functions that requires multiple parameters such as the
-        # heteroscedsatic Gaussian
-        if isinstance(self.loss, str):
-            self._loss = getattr(custom_losses, self.loss)(
-                n_dim=y.shape[2]
-            )
-        else:
-            self._loss = self.loss
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
 
@@ -146,7 +142,7 @@ class Forecaster():
 
     def get_optimizer_args(self):
         """Get optimizer parameters."""
-        args = getargspec(self._optimizer.__class__)[0]
+        args = getargspec(self._optimizer.__class__)[0]  # REVIEW @Toby: getargspec is being deprecated
         args.remove('self')
         return args
 
@@ -162,7 +158,7 @@ class Forecaster():
 class VectorScaler():
     """Scaler class.
 
-    Recsales vectors removing mean and dividing by standard deviation
+    Rescale vectors removing mean and dividing by standard deviation
     on a component basis.
 
     :param targets: targets in the data that should be rescaled.

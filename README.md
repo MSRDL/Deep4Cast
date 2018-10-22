@@ -29,5 +29,4 @@ $ python setup.py install
 - [Toby Bischoff](http://github.com/bischtob)
 - Austin Gross
 - Shirley Ren
-- Kenneth Tran
-
+- [Kenneth Tran](http://www.kentran.net)
