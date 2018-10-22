@@ -1,45 +1,33 @@
-@Toby:
-- Almost never check in binary files
-- Code that is outside the scope of the library (e.g. `process_blah.py` should be in the example notebooks). Personal code should have `personal` in the filename so that it's ignored by git.
-- `requirements.txt` contained too many packages. It should contain a minimal set of required packages.
+# Deep4cast: Neural Networks for Time Series Modeling
 
-# Deep4cast
+<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/toby/doc/images/cover.png" height=200>
 
-***This package is under development.***
+***This package is under active development. Things may change :-).***
 
-```Deep4cast``` provides easy access to deep learning-based tools for forecasting, anomaly detection, and counterfactual analysis.
+```Deep4cast``` is a scalable machine learning package implemented in Python. It has a front-end API designed to be similar to scikit-learn, but is based on Keras. It was designed for medium to large size time series data sets and allows for modeling of forecast uncertainties via Monte Carlo Dropout.
 
-### Forecasting
-Quickstart tutorial can be found in ```/tutorials/quickstart.ipynb```.
-
-### Anomaly Detection
-Tutorial coming soon.
-
-## Documentation
-Documentation can be found in ```/docs/build/html/index.html```.
+Package documentation under construction. Please see example notebooks for instructions.
 
 ## Installation
 ### Source
-From the package directory you then need to install the requirements and the package
+From the package directory you then need to install the requirements and then the package (best in a clean virtual environment)
 ```
 $ pip install -r requirements.txt
 $ python setup.py install
 ```
-or with pip's editable model (useful for development) as
-```
-$ pip install -r requirements.txt
-$ pip install -e .
-```
 
 ### Main Requirements
-```
-Python 3.6
-Tensorflow, CTNK, or Theano
-Keras
-```
+- [python](http://python.org) - version 3.6
+- [tensorflow](https://www.tensorflow.org/)
+- [keras](https://keras.io/)
+- [scikit-optimize](https://github.com/scikit-optimize/scikit-optimize)
 
-## Contributor Instructions
-Coming soon
+## Examples
+- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)
 
 ## Authors
-TBD
+- [Toby Bischoff](http://github.com/bischtob)
+- Austin Gross
+- Shirley Ren
+- Kenneth Tran
+

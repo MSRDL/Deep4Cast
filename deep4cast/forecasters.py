@@ -5,51 +5,30 @@ series given as numpy arrays.
 """
 from inspect import getargspec
 
-import time
 import numpy as np
 import keras.optimizers
 
 from keras.callbacks import TerminateOnNaN
-from keras.models import model_from_json
 from . import custom_losses
 
 
 class Forecaster():
     """Forecaster class.
 
-    This class fits a neural network model to a dataset.
-
-    :param model: model.
-    :type model: A model class
-    :param lag: Lookback window.
-    :type lag: int
-    :param horizon: length of forecasting horizon.
-    :type horizon: int
-    :param loss: training loss.
-    :type loss: string
-    :param optimizer: Optimizer.
-    :type optimizer: string
-    :param batch_size: training and prediction batch_size.
-    :type batch_size: int
-    :param epochs: Number of training epochs.
-    :type epochs: int
+    Take a keras model and builds a forecaster.
 
     """
 
     def __init__(self,
                  model,
-                 lag,
-                 horizon,
                  loss='heteroscedastic_gaussian',
                  optimizer='adam',
                  batch_size=16,
                  epochs=100,
-                 ** kwargs):
+                 **kwargs):
         """Initialize properties."""
         # Neural network model attributes
         self.model = model  # Neural network architecture (Keras model)
-        self.lag = lag   # Lookback window (length of input)
-        self.horizon = horizon  # Forecasting horizon (length of output)
 
         # Optimizer attributes
         self.optimizer = optimizer
@@ -65,8 +44,8 @@ class Forecaster():
                 raise ValueError('{} not a valid argument.'.format(key))
         self.set_optimizer_args(kwargs)
 
-        # Other
-        self.is_fitted = False
+        # Boolean checks for refitting
+        self._is_fitted = False
 
     def fit(self, X, y, verbose=0):
         """Fit model to data."""
@@ -89,9 +68,8 @@ class Forecaster():
 
         # Need to handle the case where the model is fitted for more epochs
         # after it has already been fitted
-        if not self.is_fitted:
+        if not self._is_fitted:
             # Set up the model based on internal model class
-            # Support multi-gpu training
             self.model.build_layers(
                 input_shape=X.shape[1:],
                 output_shape=output_shape
@@ -111,7 +89,7 @@ class Forecaster():
         )
 
         # Change state to fitted so that other methods work correctly
-        self.is_fitted = True
+        self._is_fitted = True
 
     def predict(self, X, n_samples=1000):
         """Generate predictions for input time series numpy array.
@@ -119,6 +97,7 @@ class Forecaster():
         :type data: numpy.array
         :param n_samples: Number of prediction samples (>= 1).
         :type n_samples: int
+
         """
         # Check if model is actually fitted
         self.check_is_fitted()
@@ -137,21 +116,26 @@ class Forecaster():
 
         # Reorganize prediction samples into 3D array
         reshuffled_predictions = []
-        for i in range(n_samples):
-            block = predictions[i * block_size:(i + 1) * block_size]
+        for i in range(block_size):
+            block = predictions[i * n_samples:(i + 1) * n_samples]
+            block = np.expand_dims(block, axis=1)
             reshuffled_predictions.append(block)
-        predictions = np.array(reshuffled_predictions)
+        predictions = np.concatenate(reshuffled_predictions, axis=1)
 
         return predictions
 
     def check_is_fitted(self):
         """Raise error if model has not been fitted to data."""
-        if not self.is_fitted:
+        if not self._is_fitted:
             raise ValueError('The model has not been fitted.')
+
+    def reset(self):
+        """Reset model for refitting."""
+        self._is_fitted = False
 
     @property
     def optimizer(self):
-        """Return the optimizer name."""
+        """Return the optimizer name only."""
         return self._optimizer.__class__.__name__
 
     @optimizer.setter
@@ -174,23 +158,73 @@ class Forecaster():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
 
-    def save_model(self, filename):
-        """Save model to JSON file."""
-        # Save model specifications
-        model_json = self.model.to_json()
-        with open(filename + '.json', 'w') as fid:
-            fid.write(model_json)
 
-        # Save model weights
-        self.model.save_weights(filename + '.h5')
-        print('Saved model at {}.'.format(filename))
+class VectorScaler():
+    """Scaler class.
 
-    def load_model(self, filename):
-        """Load model from JSON."""
-        # Load model specifications
-        with open(filename + '.json', 'r') as fid:
-            self.model = model_from_json(fid.read())
-        fid.close()
+    Recsales vectors removing mean and dividing by standard deviation
+    on a component basis.
 
-        # Load weights into model
-        self.model.load_weights(filename + '.h5')
+    :param targets: targets in the data that should be rescaled.
+    :type targets: list
+
+    """
+
+    def __init__(self, targets=None):
+        """Initialize properties."""
+        self.targets = targets
+        self.x_mean = None
+        self.x_std = None
+        self.x_is_fitted = False
+        self.y_mean = None
+        self.y_std = None
+        self.y_is_fitted = False
+
+    def fit_x(self, X):
+        """Fit the scaler."""
+        if self.targets is None:
+            mean = np.mean(X, axis=0)
+            std = np.std(X, axis=0)
+        else:
+            # Need to concatenate mean with zeros and stds with ones for
+            # categorical targets
+            mean = np.zeros(X.shape[1:])
+            std = np.ones(X.shape[1:])
+            mean[:, self.targets] = np.mean(X[:, :, self.targets], axis=0)
+            std[:, self.targets] = np.std(X[:, :, self.targets], axis=0)
+
+        self.x_mean = mean
+        self.x_std = std
+        self.x_is_fitted = True
+
+    def fit_y(self, y):
+        """Fit the scaler."""
+        self.y_mean = np.mean(y, axis=0)
+        self.y_std = np.std(y, axis=0)
+        self.y_is_fitted = True
+
+    def transform_x(self, X):
+        return (X - self.x_mean) / self.x_std
+
+    def transform_y(self, y):
+        return (y - self.y_mean) / self.y_std
+
+    def fit_transform_x(self, X):
+        self.fit_x(X)
+        return self.transform_x(X)
+
+    def fit_transform_y(self, y):
+        self.fit_y(y)
+        return self.transform_y(y)
+
+    def inverse_transform_x(self, X):
+        if self.x_is_fitted:
+            return X * self.x_std + self.x_mean
+        else:
+            raise ValueError('Not fitted on X.')
+
+    def inverse_transform_y(self, y):
+        if self.y_is_fitted:
+            return y * self.y_std + self.y_mean
+        else:
+            raise ValueError('Not fitted on y.')

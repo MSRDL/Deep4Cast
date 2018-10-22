@@ -18,9 +18,21 @@ def check_data_format(data, horizon):
 
 def sequentialize(data, lag, horizon, targets=None):
     """Sequentialize time series array.
+
     Create two numpy arrays, one for the windowed input time series X
     and one for the corresponding output values that need to be
-    predicted.
+    predicted. Targets are the the indices of the variables that need to be
+    forecasted.
+
+    :param data: Input time series data.
+    :type data: numpy array
+    :param lag: Number of time steps as input.
+    :type lag: int
+    :param horizon: Number of time steps to forecast
+    :type horizon: int
+    :param targets: indices of variables to forecast.
+    :type targets: list
+
     """
 
     # Sequentialize the dataset, i.e., split it into shorter windowed
@@ -46,6 +58,7 @@ def sequentialize(data, lag, horizon, targets=None):
             else:
                 y.append(forecast_ts)
 
+    # Need to check that time series are of appropriate length
     if not X or not y:
         raise ValueError(
             'Time series is too short for lag and/or horizon. lag {} + horizon {} > n_time_steps {}.'.format(
