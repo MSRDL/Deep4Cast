@@ -4,7 +4,7 @@
 
 ***This package is under active development. Things may change :-).***
 
-```Deep4cast``` is a scalable machine learning package implemented in Python. It has a front-end API designed to be similar to scikit-learn, but is based on Keras. It was designed for medium to large size time series data sets and allows for modeling of forecast uncertainties via Monte Carlo Dropout.
+```Deep4cast``` is a scalable machine learning package implemented in Python. It has a front-end API designed to be similar to scikit-learn, but is based on Keras. It was designed for medium to large size time series data sets and allows for modeling of forecast uncertainties.
 
 Package documentation under construction. Please see example notebooks for instructions.
 
