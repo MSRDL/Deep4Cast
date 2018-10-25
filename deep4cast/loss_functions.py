@@ -1,15 +1,21 @@
 """ Losses module for custom Keras losses."""
 
 import numpy as np
-
+from abc import ABC, abstractmethod
 from keras import backend as K
 from keras import losses
 
 
-class mse():
+# TODO: all loss classes should implement an abstract Loss class.
+class Loss(ABC):
+    # REVIEW Toby: what do these classes have in common?
+    pass
+
+
+class mse(Loss):
     """
     Probabilistic loss function class that implements keras log-
-    likelhood loss and sampling from pdf for regular mean-squared error loss.
+    likelihood loss and sampling from pdf for regular mean-squared error loss.
     This means that there is not much to do here as it behaves like a Gaussian
     with zero variance.
 
@@ -31,10 +37,10 @@ class mse():
         return y_pred
 
 
-class mae():
+class mae(Loss):
     """
     Probabilistic loss function class that implements keras log-
-    likelhood loss and sampling from pdf for regular mean-absolute error loss.
+    likelihood loss and sampling from pdf for regular mean-absolute error loss.
     This mean, there is not much to do here as it behaves like a Laplacian
     with zero variance.
 
@@ -56,10 +62,10 @@ class mae():
         return y_pred
 
 
-class heteroscedastic_gaussian():
+class gaussian(Loss):
     """
     Probabilistic loss function class that implements keras log-
-    likelhood loss and sampling from pdf for a heteroscedastic Gaussian.
+    likelihood loss and sampling from pdf for a heteroscedastic Gaussian.
     :param n_dim: dimensionality of the samples.
     :type n_dim: int
 
@@ -93,7 +99,7 @@ class heteroscedastic_gaussian():
             mean = y_pred[:, :, :self.n_dim]
             log_var = y_pred[:, :, self.n_dim:]
         else:
-            raise(IndexError('y_pred should have 3 or 4 dimensions.'))
+            raise (IndexError('y_pred should have 3 or 4 dimensions.'))
 
         return self._sample_from_likelihood(mean, log_var, n_samples=n_samples)
 

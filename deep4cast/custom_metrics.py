@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Metrics module for error functions."""
 
 import numpy as np

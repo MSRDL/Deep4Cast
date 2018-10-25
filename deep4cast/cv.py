@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 """Cross-validation and optimization module.
-This module provides access to tools for cross-calidation and optimization of
+This module provides access to tools for cross-validation and optimization of
 forecasters using Bayesian Optimization.
 """
 import time

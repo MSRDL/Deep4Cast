@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Models module.
 
 This module provides access to neural network topologies that can be used
@@ -27,8 +26,9 @@ class StackedGRU(Model):
 
     """
 
-    def __init__(self, units=32, num_layers=1, activation='relu'):
+    def __init__(self, units=32, num_layers=1, activation='relu', *args, **kwargs):
         """Initialize attributes."""
+        super().__init__(*args, **kwargs)
         if num_layers < 1:
             raise ValueError('num_layers must be > 1.')
 
@@ -122,8 +122,9 @@ class WaveNet(Model):
 
     """
 
-    def __init__(self, filters=32, num_layers=1, activation='relu'):
+    def __init__(self, filters=32, num_layers=1, activation='relu', *args, **kwargs):
         """Initialize attributes."""
+        super().__init__(*args, **kwargs)
         if num_layers < 1:
             raise ValueError('num_layers must be > 1.')
 
@@ -142,7 +143,7 @@ class WaveNet(Model):
 
         """
         # First layer behaves differently cause of the difference in
-        # channele for the conv laters.
+        # channels for the conv layers.
         inputs, outputs = self.build_input(input_shape)
 
         # Core of the network is created here
