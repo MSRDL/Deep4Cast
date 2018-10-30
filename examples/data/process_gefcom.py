@@ -1,6 +1,7 @@
 import datetime as dt
 import pandas as pd
 import argparse
+import os
 
 from pandas.tseries.holiday import USFederalHolidayCalendar as calendar
 
@@ -22,10 +23,8 @@ def prepare_data(data_path):
     df['date'] = pd.to_datetime(df.date)
 
     # Create a time field
-    hours_td = []
-    for hour in df.hour.values:
-        hours_td.append(dt.timedelta(hours=float(hour)))
-    df['time'] = df.date + hours_td
+    df['time'] = df.date + \
+        df.hour.apply(lambda x: dt.timedelta(hours=float(x)))
 
     # Create a day of week field
     df['day'] = df.time.dt.dayofweek
@@ -73,14 +72,19 @@ def prepare_data(data_path):
 
 def main():
     parser = argparse.ArgumentParser(description='Prepare data')
-    parser.add_argument('--data_path')
-    parser.add_argument('--output_path')
+    parser.add_argument('--data_path',
+                        default='raw/gefcom2014-e.csv')
+    parser.add_argument('--output_path',
+                        default='processed/GEFCom2014-e.pkl')
     args = parser.parse_args()
 
     # Get the data
     df = prepare_data(args.data_path)
-
+        
     # Store data
+    path = os.path.dirname(args.output_path)
+    if not os.path.exists(path):
+        os.makedirs(path)
     df.to_pickle(args.output_path)
 
 

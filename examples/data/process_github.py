@@ -1,5 +1,6 @@
 import pandas as pd
 import argparse
+import os
 
 from pandas.tseries.holiday import USFederalHolidayCalendar as calendar
 
@@ -59,14 +60,19 @@ def prepare_data(data_path):
 
 def run():
     parser = argparse.ArgumentParser(description='Prepare data')
-    parser.add_argument('--data_path')
-    parser.add_argument('--output_path')
+    parser.add_argument('--data_path',
+                        default='raw/github_total_push_events_2011-2018.csv')
+    parser.add_argument('--output_path',
+                        default='processed/github_dau_2011-2018.pkl')
     args = parser.parse_args()
 
     # Get the data
     df = prepare_data(args.data_path)
 
     # Store data
+    path = os.path.dirname(args.output_path)
+    if not os.path.exists(path):
+        os.makedirs(path)
     df.to_pickle(args.output_path)
 
 
