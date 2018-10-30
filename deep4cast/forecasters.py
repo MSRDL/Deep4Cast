@@ -34,13 +34,7 @@ class Forecaster():
         self.batch_size = batch_size
         self.epochs = epochs
         self.history = None
-        if isinstance(loss, str):
-            self._loss = getattr(loss_functions, loss)(
-                n_dim=y.shape[2]
-            )
-        else:
-            assert isinstance(loss, loss_functions.Loss)
-            self._loss = loss
+        self._loss = loss
 
         # Configure optimizer
         allowed_kwargs = self.get_optimizer_args()
@@ -59,13 +53,20 @@ class Forecaster():
         X = X.astype('float32')
         y = y.astype('float32')
 
+        # TODO: all initializations should happen in __init__
+        # Users should be mindful of the input and output dimensions.
+        if not isinstance(self._loss, loss_functions.Loss):
+            self._loss = getattr(loss_functions, self._loss)(n_dim=y.shape[2])
+
         loss_dim_factor = self._loss.dim_factor
         output_shape = (y.shape[1], y.shape[2] * loss_dim_factor)
 
         # Need to handle the case where the model is fitted for more epochs
         # after it has already been fitted
         if not self._is_fitted:
-            # Set up the model based on internal model class
+            # TODO: all initializations should happen in __init__
+            # Users should be mindful of the input and output dimensions. Plus, they may want to design their own net, which shouldn't
+            # require implementing `build_layers`.
             self.model.build_layers(
                 input_shape=X.shape[1:],
                 output_shape=output_shape
