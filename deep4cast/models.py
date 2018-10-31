@@ -12,7 +12,7 @@ from keras.models import Model
 from . import custom_layers
 
 
-class StackedGRU(object):
+class StackedGRU(Model):
     """Extends keras.models.Model object.
 
     Implementation of stacked GRU topology for multivariate time series.
@@ -105,7 +105,7 @@ class StackedGRU(object):
         return outputs
 
 
-class WaveNet(object):
+class WaveNet(Model):
     """Extends keras.models.Model object.
 
     Implementation of WaveNet-like topology for multivariate time series. This 
@@ -122,6 +122,8 @@ class WaveNet(object):
     """
 
     def __init__(self, filters=32, num_layers=1, activation='relu', *args, **kwargs):
+        # TODO: subclass should call superclass's __init__
+        # Users need to supply input/output shape.
         """Initialize attributes."""
         if num_layers < 1:
             raise ValueError('num_layers must be > 1.')
