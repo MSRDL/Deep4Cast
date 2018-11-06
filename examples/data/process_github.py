@@ -61,7 +61,7 @@ def prepare_data(data_path):
 def run():
     parser = argparse.ArgumentParser(description='Prepare data')
     parser.add_argument('--data_path',
-                        default='raw/github_total_push_events_2011-2018.csv')
+                        default='raw/github_dau_2011-2018.csv')
     parser.add_argument('--output_path',
                         default='processed/github_dau_2011-2018.pkl')
     args = parser.parse_args()
