@@ -9,7 +9,7 @@ import pandas as pd
 
 from . import utils
 from . import custom_metrics
-from inspect import getargspec
+from inspect import getfullargspec
 from skopt.utils import use_named_args
 from skopt import gp_minimize
 
@@ -141,10 +141,10 @@ class CrossValidator():
 
     def get_args(self):
         """Return the parameters that the forecaster can take."""
-        fold_generator_args = getargspec(self.fold_generator.__class__).args
-        model_args = getargspec(self.forecaster.model.__class__).args
-        forecaster_args = getargspec(self.forecaster.__class__).args
-        optimizer_args = getargspec(self.forecaster._optimizer.__class__).args
+        fold_generator_args = getfullargspec(self.fold_generator.__class__).args
+        model_args = getfullargspec(self.forecaster.model.__class__).args
+        forecaster_args = getfullargspec(self.forecaster.__class__).args
+        optimizer_args = getfullargspec(self.forecaster._optimizer.__class__).args
         return {
             'fold_generator': fold_generator_args,
             'model': model_args,

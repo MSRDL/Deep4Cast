@@ -2,7 +2,7 @@
 This module provides access to forecasters that can be fit multivariate time
 series given as numpy arrays.
 """
-from inspect import getargspec
+from inspect import getfullargspec
 from typing import Union
 import numpy as np
 import keras.optimizers
@@ -143,14 +143,14 @@ class Forecaster():
 
     def get_optimizer_args(self):
         """Get optimizer parameters."""
-        args = getargspec(self._optimizer.__class__)[0]  # REVIEW @Toby: getargspec is being deprecated
+        args = getfullargspec(self._optimizer.__class__)[0]
         args.remove('self')
         return args
 
     def set_optimizer_args(self, params):
         """Set optimizer parameters."""
         optimizer_class = self._optimizer.__class__
-        optimizer_args = getargspec(optimizer_class)[0]
+        optimizer_args = getfullargspec(optimizer_class)[0]
         for key, value in params.items():
             if key in optimizer_args:
                 setattr(self._optimizer, key, value)
