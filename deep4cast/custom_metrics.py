@@ -46,7 +46,7 @@ def mape(data_samples, data_truth):
 
 
 def smape(data_samples, data_truth):
-    """Computes symmetric mean absolute percentage error (SMAPE)
+    """Computes symmetric mean absolute percentage error (SMAPE) on the mean
     :param data: Predicted time series values (n_timesteps, n_timeseries)
     :type data: numpy array
     :param data_truth: Ground truth time series values
@@ -54,6 +54,22 @@ def smape(data_samples, data_truth):
 
     """
     data = np.mean(data_samples, axis=0)
+
+    eps = 1e-16  # Need to make sure that denominator is not zero
+    norm = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
+
+    return np.round(np.mean(np.abs(data - data_truth) / norm) * 100.0, 2)
+
+
+def smape_median(data_samples, data_truth):
+    """Computes symmetric mean absolute percentage error (SMAPE) on the median
+    :param data: Predicted time series values (n_timesteps, n_timeseries)
+    :type data: numpy array
+    :param data_truth: Ground truth time series values
+    :type data_truth: numpy array
+
+    """
+    data = np.median(data_samples, axis=0)
 
     eps = 1e-16  # Need to make sure that denominator is not zero
     norm = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
