@@ -6,13 +6,7 @@ from keras import backend as K
 from keras import losses
 
 
-# TODO: all loss classes should implement an abstract Loss class.
 class Loss(ABC):
-    # REVIEW Toby: what do these classes have in common?
-    pass
-
-
-class mse(Loss):
     """
     Probabilistic loss function class that implements keras log-
     likelihood loss and sampling from pdf for regular mean-squared error loss.
@@ -20,45 +14,45 @@ class mse(Loss):
     with zero variance.
 
     """
+    @abstractmethod
+    def __call__(self):
+        """The call function needs to behave like a typical Keras loss function."""
+        raise NotImplementedError
 
-    def __init__(self, **kwargs):
+    @abstractmethod
+    def sample(self):
+        raise NotImplementedError
+
+
+class mse(Loss):
+    """Mean squared error."""
+
+    def __init__(self, *args, **kwargs):
         """Initialize instance parameters."""
-        self.dim_factor = 1
+        self.keras_loss = losses.mean_squared_error
 
     def __call__(self, y_true, y_pred):
         """Need a call function that behaves like Keras loss."""
-        return losses.mean_squared_error(y_true, y_pred)
+        return self.keras_loss(y_true, y_pred)
 
-    def sample(self, y_pred, n_samples=1):
-        """
-        Need a sample function that takes in Keras outputs and draws
-        samples from correct pdf."
-        """
+    def sample(self, y_pred, **kwargs):
+        """No sampling happens. We just return the predicted values."""
         return y_pred
 
 
 class mae(Loss):
-    """
-    Probabilistic loss function class that implements keras log-
-    likelihood loss and sampling from pdf for regular mean-absolute error loss.
-    This mean, there is not much to do here as it behaves like a Laplacian
-    with zero variance.
+    """Mean absolute error."""
 
-    """
-
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         """Initialize instance parameters."""
-        self.dim_factor = 1
+        self.keras_loss = losses.mean_absolute_error
 
     def __call__(self, y_true, y_pred):
         """Need a call function that behaves like Keras loss."""
-        return losses.mean_absolute_error(y_true, y_pred)
+        return self.keras_loss(y_true, y_pred)
 
-    def sample(self, y_pred, n_samples=1):
-        """
-        Need a sample function that takes in Keras outputs and draws
-        samples from correct pdf."
-        """
+    def sample(self, y_pred, **kwargs):
+        """No sampling happens. We just return the predicted values."""
         return y_pred
 
 
@@ -66,15 +60,14 @@ class gaussian(Loss):
     """
     Probabilistic loss function class that implements keras log-
     likelihood loss and sampling from pdf for a heteroscedastic Gaussian.
-    :param n_dim: dimensionality of the samples.
-    :type n_dim: int
+    :param output_shape: keras model output shape.
+    :type output_shape: tuple
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, output_shape):
         """Initialize instance parameters."""
-        self.n_dim = kwargs['n_dim']
-        self.dim_factor = 2
+        self.n_dim = int(output_shape[1]/2)  # Number of independent covariates
 
     def __call__(self, y_true, y_pred):
         """Need a call function that behaves like Keras loss."""
@@ -92,16 +85,18 @@ class gaussian(Loss):
         """
         # Mean and log variance are parameterized by the first
         # and second half of y_pred.
-        if len(y_pred.shape) == 4:
-            mean = y_pred[:, :, :, :self.n_dim]
-            log_var = y_pred[:, :, :, self.n_dim:]
-        elif len(y_pred.shape) == 3:
-            mean = y_pred[:, :, :self.n_dim]
-            log_var = y_pred[:, :, self.n_dim:]
-        else:
-            raise (IndexError('y_pred should have 3 or 4 dimensions.'))
+        mean = y_pred[:, :, :self.n_dim]
+        log_var = y_pred[:, :, self.n_dim:]
 
-        return self._sample_from_likelihood(mean, log_var, n_samples=n_samples)
+        # Bring mean and logvar into shape
+        mean = np.repeat(mean, n_samples, axis=0)
+        std = np.repeat(np.exp(0.5 * log_var), n_samples, axis=0)
+        size = mean.shape
+
+        # Draw samples
+        samples = np.random.standard_normal(size=size)
+
+        return samples * std + mean
 
     def log_likelihood(self, y, mean, log_var):
         """Return log likelihood for this distribution."""
@@ -115,17 +110,3 @@ class gaussian(Loss):
         heteroscedastic_loss = K.mean(weighted_squares)
 
         return heteroscedastic_loss
-
-    def _sample_from_likelihood(self, mean, log_var, n_samples):
-        """
-        Return n_samples from the probability distribution function
-        where mean and log_var are arrays of shape (n_batch, n_steps, n_vars).
-
-        """
-        mean = np.repeat(mean, n_samples, axis=0)
-        std = np.repeat(np.exp(0.5 * log_var), n_samples, axis=0)
-        size = mean.shape
-
-        samples = np.random.standard_normal(size=size)
-
-        return samples * std + mean

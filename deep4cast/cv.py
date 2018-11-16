@@ -13,7 +13,6 @@ from inspect import getfullargspec
 from skopt.utils import use_named_args
 from skopt import gp_minimize
 
-__FOLD_GENERATOR_ARGS__ = ['lag']
 __MODEL_ARGS__ = ['filters', 'units', 'num_layers']
 __FORECASTER_ARGS__ = ['epochs', 'batch_size']
 __OPTIMIZER_ARGS__ = ['lr']
@@ -106,9 +105,7 @@ class CrossValidator():
             """This is the function that we build fgor the optimizer to
             optimizer."""
             for key, value in params.items():
-                if key in args['fold_generator'] and key in __FOLD_GENERATOR_ARGS__:
-                    setattr(self.fold_generator, key, value)
-                elif key in args['model'] and key in __MODEL_ARGS__:
+                if key in args['model'] and key in __MODEL_ARGS__:
                     setattr(self.forecaster.model, key, value)
                 elif key in args['optimizer'] and key in __OPTIMIZER_ARGS__:
                     setattr(self.forecaster._optimizer, key, value)
@@ -141,12 +138,10 @@ class CrossValidator():
 
     def get_args(self):
         """Return the parameters that the forecaster can take."""
-        fold_generator_args = getfullargspec(self.fold_generator.__class__).args
         model_args = getfullargspec(self.forecaster.model.__class__).args
         forecaster_args = getfullargspec(self.forecaster.__class__).args
         optimizer_args = getfullargspec(self.forecaster._optimizer.__class__).args
         return {
-            'fold_generator': fold_generator_args,
             'model': model_args,
             'forecaster': forecaster_args,
             'optimizer': optimizer_args

@@ -17,6 +17,10 @@ class StackedGRU(Model):
 
     Implementation of stacked GRU topology for multivariate time series.
 
+    :param input_shape: Shape of input example.
+    :type input_shape: tuple
+    :param output_shape: Shape of output consistent with loss function.
+    :type output_shape: tuple
     :param units: Number of hidden units for each layer.
     :type units: int
     :param num_layers: Number of stacked layers.
@@ -26,15 +30,15 @@ class StackedGRU(Model):
 
     """
 
-    def __init__(self, units=32, num_layers=1, activation='relu', *args, **kwargs):
+    def __init__(self, input_shape, output_shape, units=32, num_layers=1, activation='relu'):
         """Initialize attributes."""
-        if num_layers < 1:
-            raise ValueError('num_layers must be > 1.')
-
         self.units = units
         self.num_layers = num_layers
         self.activation = activation
-        self._dropout_layer = custom_layers.ConcreteDropout
+        self.dropout_layer = custom_layers.ConcreteDropout
+
+        # Initialize model and super class
+        self.build_layers(input_shape, output_shape)
 
     def build_layers(self, input_shape, output_shape):
         """Build layers of the network.
@@ -59,7 +63,7 @@ class StackedGRU(Model):
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
-        outputs_first = self._dropout_layer(temporal=True)(inputs)
+        outputs_first = self.dropout_layer(temporal=True)(inputs)
         outputs = keras.layers.GRU(
             units=self.units,
             activation=self.activation
@@ -78,7 +82,7 @@ class StackedGRU(Model):
 
     def build_output(self, x, output_shape):
         """Return last layer for network."""
-        x = self._dropout_layer(temporal=True)(x)
+        x = self.dropout_layer(temporal=True)(x)
         outputs = keras.layers.Conv1D(
             filters=output_shape[1],
             kernel_size=1,
@@ -87,7 +91,7 @@ class StackedGRU(Model):
             use_bias=True
         )(x)
         outputs = keras.layers.Flatten()(outputs)
-        outputs = self._dropout_layer()(outputs)
+        outputs = self.dropout_layer()(outputs)
         outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
         outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
 
@@ -95,7 +99,7 @@ class StackedGRU(Model):
 
     def build_gru_block(self, x):
         """Build core of the network."""
-        x = self._dropout_layer(temporal=True)(x)
+        x = self.dropout_layer(temporal=True)(x)
         outputs = keras.layers.GRU(
             units=self.units,
             activation=self.activation
@@ -109,9 +113,13 @@ class WaveNet(Model):
     """Extends keras.models.Model object.
 
     Implementation of WaveNet-like topology for multivariate time series. This 
-    architecture is built on the idea of temporal causal convolutions that can
+    architecture is built on the idea of causal convolutions that can
     extract features from time series.
 
+    :param input_shape: Shape of input example.
+    :type input_shape: tuple
+    :param output_shape: Shape of output consistent with loss function.
+    :type output_shape: tuple
     :param filters: Number of hidden units for each layer.
     :type filters: int
     :param num_layers: Number of stacked layers.
@@ -121,17 +129,15 @@ class WaveNet(Model):
 
     """
 
-    def __init__(self, filters=32, num_layers=1, activation='relu', *args, **kwargs):
-        # TODO: subclass should call superclass's __init__
-        # Users need to supply input/output shape.
+    def __init__(self, input_shape, output_shape, filters=32, num_layers=1, activation='relu'):
         """Initialize attributes."""
-        if num_layers < 1:
-            raise ValueError('num_layers must be > 1.')
-
         self.filters = filters
         self.num_layers = num_layers
         self.activation = activation
-        self._dropout_layer = custom_layers.ConcreteDropout
+        self.dropout_layer = custom_layers.ConcreteDropout
+
+        # Initialize model and super class
+        self.build_layers(input_shape, output_shape)
 
     def build_layers(self, input_shape, output_shape):
         """Build layers of the network.
@@ -153,12 +159,13 @@ class WaveNet(Model):
         # Finally we need to match the output dimensions
         outputs = self.build_output(outputs, output_shape)
 
+        # After layers have been build, the super class needs to initialized
         super(WaveNet, self).__init__(inputs, outputs)
 
     def build_input(self, input_shape):
         """Return first layer of network."""
         inputs = keras.layers.Input(shape=input_shape)
-        outputs_first = self._dropout_layer(temporal=True)(inputs)
+        outputs_first = self.dropout_layer(temporal=True)(inputs)
         outputs = keras.layers.Conv1D(
             filters=self.filters,
             kernel_size=2,
@@ -183,7 +190,7 @@ class WaveNet(Model):
 
     def build_output(self, x, output_shape):
         """Return last layer for network."""
-        x = self._dropout_layer(temporal=True)(x)
+        x = self.dropout_layer(temporal=True)(x)
         outputs = keras.layers.Conv1D(
             filters=output_shape[1],
             kernel_size=1,
@@ -192,7 +199,7 @@ class WaveNet(Model):
             use_bias=True
         )(x)
         outputs = keras.layers.Flatten()(outputs)
-        outputs = self._dropout_layer()(outputs)
+        outputs = self.dropout_layer()(outputs)
         outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
         outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
 
@@ -200,7 +207,7 @@ class WaveNet(Model):
 
     def build_wavenet_block(self, x, power):
         """Build core of the network."""
-        x = self._dropout_layer(temporal=True)(x)
+        x = self.dropout_layer(temporal=True)(x)
         outputs = keras.layers.Conv1D(
             filters=self.filters,
             kernel_size=2,
