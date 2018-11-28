@@ -108,7 +108,7 @@ class CrossValidator():
                 if key in args['model'] and key in __MODEL_ARGS__:
                     setattr(self.forecaster.model, key, value)
                 elif key in args['optimizer'] and key in __OPTIMIZER_ARGS__:
-                    setattr(self.forecaster._optimizer, key, value)
+                    setattr(self.forecaster.optimizer, key, value)
                 elif key in args['forecaster'] and key in __FORECASTER_ARGS__:
                     setattr(self.forecaster, key, value)
                 else:
@@ -140,7 +140,7 @@ class CrossValidator():
         """Return the parameters that the forecaster can take."""
         model_args = getfullargspec(self.forecaster.model.__class__).args
         forecaster_args = getfullargspec(self.forecaster.__class__).args
-        optimizer_args = getfullargspec(self.forecaster._optimizer.__class__).args
+        optimizer_args = getfullargspec(self.forecaster.optimizer.__class__).args
         return {
             'model': model_args,
             'forecaster': forecaster_args,
