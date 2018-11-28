@@ -22,6 +22,8 @@ $ python setup.py install
 - [keras](https://keras.io/)
 - [scikit-optimize](https://github.com/scikit-optimize/scikit-optimize)
 
+Tested with CUDA 9.0.
+
 ## Examples
 - [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)
 
