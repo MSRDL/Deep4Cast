@@ -75,6 +75,35 @@ class Forecaster():
         # Change state to fitted so that other methods work correctly
         self.is_fitted = True
 
+    def fit_generator(self,
+                      generator,
+                      steps_per_epoch=None,
+                      callbacks=[TerminateOnNaN()],
+                      use_multiprocessing=True,
+                      max_queue_size=self.batch_size * 2,
+                      workers=6,
+                      verbose=0):
+        """Use a generator to fit model to data."""
+        # Need to handle the case where the model is fitted for more epochs
+        # after it has already been fitted
+        if not self.is_fitted:
+            # Keras needs to compile the computational graph before fitting
+            self.model.compile(loss=self.loss, optimizer=self.optimizer)
+        # Fit model to data using generator
+        self.history = self.model.fit_generator(
+            generator,
+            steps_per_epoch=steps_per_epoch,
+            epochs=self.epochs,
+            callbacks=callbacks,
+            use_multiprocessing=use_multiprocessing,
+            max_queue_size=max_queue_size,
+            workers=workers,
+            verbose=verbose
+        )
+
+        # Change state to fitted so that other methods work correctly
+        self.is_fitted = True
+
     def predict(self, X, n_samples=1000):
         """Generate predictions for input time series numpy array.
         :param X: Time series array of shape (n_steps, n_variables).
