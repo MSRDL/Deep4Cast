@@ -80,7 +80,7 @@ class Forecaster():
                       steps_per_epoch=None,
                       callbacks=[TerminateOnNaN()],
                       use_multiprocessing=True,
-                      max_queue_size=self.batch_size * 2,
+                      max_queue_size=10,
                       workers=6,
                       verbose=0):
         """Use a generator to fit model to data."""
