@@ -1,6 +1,6 @@
 # Deep4cast: Neural Networks for Time Series Modeling
 
-<img src="https://github.com/MSRDL/Deep4Cast/blob/master/doc/images/cover.png" height=200>
+<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/master/doc/images/cover.png" height=200>
 
 ***This package is under active development. Things may change :-).***
 
@@ -18,11 +18,7 @@ $ python setup.py install
 
 ### Main Requirements
 - [python](http://python.org) - version 3.6
-- [tensorflow](https://www.tensorflow.org/)
-- [keras](https://keras.io/)
-- [scikit-optimize](https://github.com/scikit-optimize/scikit-optimize)
-
-Tested with CUDA 9.0.
+- [pytorch](http://pytorch.org) - version 1.0
 
 ## Examples
 - [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)

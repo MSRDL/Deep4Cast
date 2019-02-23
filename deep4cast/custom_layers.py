@@ -1,21 +1,16 @@
 # -*- coding: utf-8 -*-
 """Custom layers module."""
+import torch
 import numpy as np
 
-from keras import initializers
-from keras import backend as K
-from keras.layers import Layer
-from keras.legacy import interfaces
-from keras.engine import InputSpec
 
-
-class ConcreteDropout(Layer):
+class ConcreteDropout(torch.nn.Module):
     """Applies Dropout to the input, even at prediction time.
 
-    Dropout consists in randomly setting a fraction `rate` of input units to 0 
-    at each update during training time, which helps prevent overfitting. At 
+    Dropout consists in randomly setting a fraction `rate` of input units to 0
+    at each update during training time, which helps prevent overfitting. At
     prediction time the units are then also dropped out with the same fraction.
-    This generates samples from an approximate posterior predictive 
+    This generates samples from an approximate posterior predictive
     distribution. Unlike in MCDropout, in Concrete Dropout the dropout rates
     are learned from the data.
 
@@ -29,179 +24,71 @@ class ConcreteDropout(Layer):
         paper/6949-concrete-dropout.pdf)
 
     """
-    @interfaces.legacy_dropout_support
+
     def __init__(self,
-                 temporal=False,
-                 reg=1e-5,
+                 dropout_regularizer=1e-5,
                  init_range=(0.1, 0.3),
-                 **kwargs):
-        """Initialize parameters."""
-        super(ConcreteDropout, self).__init__(**kwargs)
-        self.reg = reg
+                 channel_wise=False):
+        super(ConcreteDropout, self).__init__()
+
+        self.dropout_regularizer = dropout_regularizer
         self.init_range = init_range
-        self.supports_masking = True
-        self.temporal = temporal
+        self.channel_wise = channel_wise
 
-        # Dropout regularization parameters
-        self.p_logit = None
-        self.p = None
-        self.init_min = np.log(init_range[0]) - np.log(1. - init_range[0])
-        self.init_max = np.log(init_range[1]) - np.log(1. - init_range[1])
+        # Initialize dropout probability
+        init_min = np.log(init_range[0]) - np.log(1. - init_range[0])
+        init_max = np.log(init_range[1]) - np.log(1. - init_range[1])
+        self.p_logit = torch.nn.Parameter(
+            torch.empty(1).uniform_(init_min, init_max))
 
-    def build(self, input_shape=None):
-        self.input_spec = InputSpec(shape=input_shape)
+    def forward(self, x):
+        # Get the dropout probability
+        p = torch.sigmoid(self.p_logit)
 
-        # Initialize the dropout probability
-        self.p_logit = self.add_weight(
-            name='p_logit',
-            shape=(1,),
-            initializer=initializers.RandomUniform(
-                self.init_min,
-                self.init_max
-            ),
-            trainable=True
-        )
-        self.p = K.sigmoid(self.p_logit[0])
+        # Apply Concrete Dropout to input
+        out = self._concrete_dropout(x, p)
 
+        # Regularization term for dropout parameters
+        dropout_regularizer = p * torch.log(p)
+        dropout_regularizer += (1. - p) * torch.log(1. - p)
+
+        # The size of the dropout regularization depends on the input size
         # The input dim used to set up the dropout probability reg,
         # depends in whether the dropout mask is constant accross time or not
-        if self.temporal:
-            input_dim = self.input_spec.shape[-1]  # Drop only last dim
+        if self.channel_wise:
+            input_dim = x.shape[1]  # Dropout only applied to channel dimension
         else:
-            input_dim = np.prod(input_shape[1:])  # Drop only last two dims
+            # Dropout applied to all dimensions
+            input_dim = np.prod(x.shape[1:])
+        dropout_regularizer *= self.dropout_regularizer * input_dim
 
-        reg = self.p * K.log(self.p)
-        reg += (1. - self.p) * K.log(1. - self.p)
-        reg *= self.reg * input_dim
-        self.add_loss(reg)
+        return out, dropout_regularizer.mean()
 
-    def concrete_dropout(self, inputs):
-        '''
-        Applies approx. dropping to inputs such that gradients can be
-        propagated.
-
-        '''
-        # Parameters for concrete distribution
-        eps = K.cast_to_floatx(K.epsilon())
+    def _concrete_dropout(self, x, p):
+        eps = 1e-7
         temp = 0.1
 
-        # The dropout mask needs to be held constant, when Dropout is applied
-        # to temporal data (i.e., same mask for each time step)
-        if self.temporal:
-            shape = (K.shape(inputs)[0], 1, K.shape(inputs)[2])
+        # Apply Concrete dropout channel wise or across all input
+        if self.channel_wise:
+            unif_noise = torch.rand_like(x[:, :, [0]])
         else:
-            shape = K.shape(inputs)
+            unif_noise = torch.rand_like(x)
 
-        # Use concrete distribution to calculate approx. dropout mask
-        unif_noise = K.random_uniform(shape=shape)
-        drop_prob = (
-            K.log(self.p + eps) -
-            K.log(1. - self.p + eps) +
-            K.log(unif_noise + eps) -
-            K.log(1. - unif_noise + eps)
-        )
-        drop_prob = K.sigmoid(drop_prob / temp)
-        retain_prob = 1. - self.p
+        drop_prob = (torch.log(p + eps)
+                     - torch.log(1 - p + eps)
+                     + torch.log(unif_noise + eps)
+                     - torch.log(1 - unif_noise + eps))
+        drop_prob = torch.sigmoid(drop_prob / temp)
+        random_tensor = 1 - drop_prob
 
-        # The dropout mask needs to be held constant, when Dropout is applied
-        # to temporal data (i.e., same mask for each time step)
-        random_tensor = 1. - drop_prob
-        if self.temporal:
-            random_tensor = K.repeat_elements(
-                random_tensor,
-                self.input_spec.shape[1],
-                1
-            )
+        # Need to make sure we have the right shape for the Dropout mask
+        if self.channel_wise:
+            random_tensor = random_tensor.repeat([1, 1, x.shape[2]])
 
-        # Approximately drop inputs
-        inputs *= random_tensor
-        inputs /= retain_prob
+        # Now drop weights
+        retain_prob = 1 - p
+        x = torch.mul(x, random_tensor)
+        x /= retain_prob
 
-        return inputs
+        return x
 
-    def call(self, inputs, training=None):
-        return self.concrete_dropout(inputs)
-
-    def get_config(self):
-        config = {'reg': self.reg,
-                  'init_range': self.init_range}
-        base_config = super(ConcreteDropout, self).get_config()
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def compute_output_shape(self, input_shape):
-        return input_shape
-
-
-class MCDropout(Layer):
-    """Applies Dropout to the input, even at prediction time.
-
-    Dropout consists in randomly setting a fraction `rate` of input units to 0 
-    at each update during training time, which helps prevent overfitting. At 
-    prediction time the units are then also dropped out with the same fraction.
-    This generates samples from an approximate posterior predictive 
-    distribution.
-
-    References
-        - [Dropout: A Simple Way to Prevent Neural Networks from
-        Overfitting](http://www.cs.toronto.edu/~rsalakhu/papers/
-        srivastava14a.pdf)
-        - [MCDropout: Dropout as a Bayesian Approximation: Representing Model
-        Uncertainty in Deep Learning](https://arxiv.org/abs/1506.02142)
-
-    """
-    @interfaces.legacy_dropout_support
-    def __init__(self, rate=0.1, temporal=False, **kwargs):
-        """Initialize parameters."""
-        super(MCDropout, self).__init__(**kwargs)
-        self.supports_masking = True
-        self.temporal = temporal  # Apply the same dropout mask across all time
-        self.p = rate
-
-    def build(self, input_shape=None):
-        self.input_spec = InputSpec(shape=input_shape)
-
-    def mc_dropout(self, inputs):
-        '''Applies approx. dropping to inputs.'''
-        # Parameters for concrete distribution
-        eps = K.cast_to_floatx(K.epsilon())
-        temp = 0.1
-
-        # The dropout mask needs to be held constant, when Dropout is applied
-        # to temporal data (i.e., same mask for each time step)
-        if self.temporal:
-            shape = (K.shape(inputs)[0], 1, K.shape(inputs)[2])
-        else:
-            shape = K.shape(inputs)
-
-        # Use concrete distribution to calculate approx. dropout mask
-        unif_noise = K.random_uniform(shape=shape)
-        drop_prob = (
-            K.log(self.p + eps) -
-            K.cast(K.log(1. - self.p + eps), dtype='float32') +
-            K.log(unif_noise + eps) -
-            K.log(1. - unif_noise + eps)
-        )
-        drop_prob = K.sigmoid(drop_prob / temp)
-        retain_prob = 1. - self.p
-
-        # The dropout mask needs to be held constant, when Dropout is applied
-        # to temporal data , i.e., same mask for each time step
-        random_tensor = 1. - drop_prob
-        if self.temporal:
-            random_tensor = K.repeat_elements(
-                random_tensor,
-                self.input_spec.shape[1],
-                1
-            )
-
-        # Approximately drop inputs
-        inputs *= random_tensor
-        inputs /= retain_prob
-
-        return inputs
-
-    def call(self, inputs, training=None):
-        return self.mc_dropout(inputs)
-
-    def compute_output_shape(self, input_shape):
-        return input_shape

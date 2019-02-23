@@ -1,223 +1,157 @@
-"""Models module.
-
-This module provides access to neural network topologies that can be used
-inside forecasters.
-
-"""
-
+# -*- coding: utf-8 -*-
+import torch
 import numpy as np
-import keras.layers
-from keras.models import Model
-
 from . import custom_layers
+import torch.nn.functional as F
 
 
-class StackedGRU(Model):
-    """Extends keras.models.Model object.
+class WaveNet(torch.nn.Module):
+    """Implements DeepMind's WaveNet for time series forecasting.
 
-    Implementation of stacked GRU topology for multivariate time series.
-
-    :param input_shape: Shape of input example.
-    :type input_shape: tuple
-    :param output_shape: Shape of output consistent with loss function.
-    :type output_shape: tuple
-    :param units: Number of hidden units for each layer.
-    :type units: int
-    :param num_layers: Number of stacked layers.
-    :type num_layers: int
-    :param activation: Activation function.
-    :type activation: string
+    The forward function returns the parameters for a Gaussian distribution.
 
     """
 
-    def __init__(self, input_shape, output_shape, units=32, num_layers=1, activation='relu'):
-        """Initialize attributes."""
-        self.units = units
-        self.num_layers = num_layers
-        self.activation = activation
-        self.dropout_layer = custom_layers.ConcreteDropout
+    def __init__(self,
+                 input_channels: int,
+                 output_channels: int,
+                 horizon: int,
+                 hidden_channels=64,
+                 skip_channels=64,
+                 dense_units=128,
+                 n_layers=7,
+                 n_blocks=1,
+                 dilation=2):
+        """Inititalize variables."""
+        super(WaveNet, self).__init__()
+        self.output_channels = output_channels
+        self.horizon = horizon
+        self.hidden_channels = hidden_channels
+        self.skip_channels = skip_channels
+        self.n_layers = n_layers
+        self.n_blocks = n_blocks
+        self.dilation = dilation
+        self.dilations = [dilation**i for i in range(n_layers)] * n_blocks
 
-        # Initialize model and super class
-        self.build_layers(input_shape, output_shape)
+        # Set up first layer for input
+        self.do_conv_input = custom_layers.ConcreteDropout(channel_wise=True)
+        self.conv_input = torch.nn.Conv1d(
+            in_channels=input_channels,
+            out_channels=hidden_channels,
+            kernel_size=1
+        )
 
-    def build_layers(self, input_shape, output_shape):
-        """Build layers of the network.
+        # Set up main WaveNet layers
+        self.do, self.conv, self.skip, self.resi = [], [], [], []
+        for d in self.dilations:
+            self.do.append(custom_layers.ConcreteDropout(channel_wise=True))
+            self.conv.append(torch.nn.Conv1d(in_channels=hidden_channels,
+                                             out_channels=hidden_channels,
+                                             kernel_size=2,
+                                             dilation=d))
+            self.skip.append(torch.nn.Conv1d(in_channels=hidden_channels,
+                                             out_channels=skip_channels,
+                                             kernel_size=1))
+            self.resi.append(torch.nn.Conv1d(in_channels=hidden_channels,
+                                             out_channels=hidden_channels,
+                                             kernel_size=1))
+        self.do = torch.nn.ModuleList(self.do)
+        self.conv = torch.nn.ModuleList(self.conv)
+        self.skip = torch.nn.ModuleList(self.skip)
+        self.resi = torch.nn.ModuleList(self.resi)
 
-        :param input_shape: Length and dimensionality of time series.
-        :type input_shape: tuple
-        :param output_shape: Output shape for predictions.
-        :type output_shape: tuple
+        # Set up nonlinear output layers
+        self.do_conv_post = custom_layers.ConcreteDropout(channel_wise=True)
+        self.conv_post = torch.nn.Conv1d(
+            in_channels=skip_channels,
+            out_channels=skip_channels,
+            kernel_size=1
+        )
+        self.do_linear_mean = custom_layers.ConcreteDropout()
+        self.do_linear_std = custom_layers.ConcreteDropout()
+        self.linear_mean = torch.nn.Linear(skip_channels, horizon*output_channels)
+        self.linear_std = torch.nn.Linear(skip_channels, horizon*output_channels)
 
-        """
-        inputs, outputs = self.build_input(input_shape)
+    def forward(self, inputs):
+        """Forward function."""
+        output, reg_e = self.encode(inputs)
+        output_mean, output_std, reg_d = self.decode(output)
 
-        # Core of the network is created here
-        for power in range(1, self.num_layers):
-            outputs = self.build_gru_block(outputs)
+        # Regularization
+        regularizer = reg_e + reg_d
 
-        # Finally we need to match the output dimensions
-        outputs = self.build_output(outputs, output_shape)
+        return {'loc': output_mean, 'scale': output_std, 'regularizer': regularizer}
 
-        super(StackedGRU, self).__init__(inputs, outputs)
+    def encode(self, inputs):
+        """Encoder part of the architecture."""
+        # Input layer
+        output, res_conv_input = self.do_conv_input(inputs)
+        output = self.conv_input(output)
+        
+        # Loop over WaveNet layers and blocks
+        regs, skip_connections = [], []
+        for do, conv, skip, resi in zip(self.do, self.conv, self.skip, self.resi):
+            layer_in = output
+            output, reg = do(layer_in)
+            output = conv(output)
+            output = torch.nn.functional.relu(output)
+            skip = skip(output)
+            output = resi(output)
+            output = output + layer_in[:, :, -output.size(2):]
+            regs.append(reg)
+            skip_connections.append(skip)
 
-    def build_input(self, input_shape):
-        """Return first layer of network."""
-        inputs = keras.layers.Input(shape=input_shape)
-        outputs_first = self.dropout_layer(temporal=True)(inputs)
-        outputs = keras.layers.GRU(
-            units=self.units,
-            activation=self.activation
-        )(outputs_first)
+        # Sum up regularizer terms and skip connections
+        regs = sum(r for r in regs)
+        output = sum([s[:, :, -output.size(2):] for s in skip_connections])
+        
+        # Nonlinear output layers
+        output, res_conv_post = self.do_conv_post(output)
+        output = torch.nn.functional.relu(output)
+        output = self.conv_post(output)
+        output = torch.nn.functional.relu(output)
+        output = output[:, :, [-1]]
+        output = output.transpose(1, 2)
 
-        skip = keras.layers.SeparableConv1D(
-            filters=self.units,
-            kernel_size=1,
-            padding='same',
-            name='skip_1',
-            use_bias=True
-        )(outputs_first)
-        outputs = keras.layers.Add()([outputs, skip])
+        # Regularization terms
+        regularizer = res_conv_input \
+            + regs \
+            + res_conv_post
 
-        return inputs, outputs
+        return output, regularizer
 
-    def build_output(self, x, output_shape):
-        """Return last layer for network."""
-        x = self.dropout_layer(temporal=True)(x)
-        outputs = keras.layers.Conv1D(
-            filters=output_shape[1],
-            kernel_size=1,
-            padding='same',
-            name='skip_out',
-            use_bias=True
-        )(x)
-        outputs = keras.layers.Flatten()(outputs)
-        outputs = self.dropout_layer()(outputs)
-        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
-        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
+    def decode(self, inputs):
+        """Decoder part of the architecture."""
+        # Apply dense layer to match output length
+        output_mean, res_linear_mean = self.do_linear_mean(inputs)
+        output_std, res_linear_std = self.do_linear_std(inputs)
+        output_mean = self.linear_mean(output_mean)
+        output_std = self.linear_std(output_std).exp()
 
-        return outputs
+        # Reshape the layer output to match targets 
+        # Shape is (batch_size, output_channels, horizon)
+        batch_size = inputs.shape[0]
+        output_mean = output_mean.reshape(
+                (batch_size, self.output_channels, self.horizon)
+        )
+        output_std = output_std.reshape(
+                (batch_size, self.output_channels, self.horizon)
+        )
 
-    def build_gru_block(self, x):
-        """Build core of the network."""
-        x = self.dropout_layer(temporal=True)(x)
-        outputs = keras.layers.GRU(
-            units=self.units,
-            activation=self.activation
-        )(x)
-        outputs = keras.layers.Add()([outputs, x])
+        # Regularization terms
+        regularizer = res_linear_mean + res_linear_std
+    
+        return output_mean, output_std, regularizer
 
-        return outputs
+    @property
+    def n_parameters(self):
+        """Return the number of parameters of model."""
+        par = list(self.parameters())
+        s = sum([np.prod(list(d.size())) for d in par])
+        return s
 
+    @property
+    def receptive_field_size(self):
+        """Return the length of the receptive field."""
+        return self.dilation * max(self.dilations)
 
-class WaveNet(Model):
-    """Extends keras.models.Model object.
-
-    Implementation of WaveNet-like topology for multivariate time series. This 
-    architecture is built on the idea of causal convolutions that can
-    extract features from time series.
-
-    :param input_shape: Shape of input example.
-    :type input_shape: tuple
-    :param output_shape: Shape of output consistent with loss function.
-    :type output_shape: tuple
-    :param filters: Number of hidden units for each layer.
-    :type filters: int
-    :param num_layers: Number of stacked layers.
-    :type num_layers: int
-    :param activation: Activation function.
-    :type activation: string
-
-    """
-
-    def __init__(self, input_shape, output_shape, filters=32, num_layers=1, activation='relu'):
-        """Initialize attributes."""
-        self.filters = filters
-        self.num_layers = num_layers
-        self.activation = activation
-        self.dropout_layer = custom_layers.ConcreteDropout
-
-        # Initialize model and super class
-        self.build_layers(input_shape, output_shape)
-
-    def build_layers(self, input_shape, output_shape):
-        """Build layers of the network.
-
-        :param input_shape: Length and dimensionality of time series.
-        :type input_shape: tuple
-        :param output_shape: Output shape for predictions.
-        :type output_shape: tuple
-
-        """
-        # First layer behaves differently cause of the difference in
-        # channels for the conv layers.
-        inputs, outputs = self.build_input(input_shape)
-
-        # Core of the network is created here
-        for power in range(1, self.num_layers):
-            outputs = self.build_wavenet_block(outputs, power)
-
-        # Finally we need to match the output dimensions
-        outputs = self.build_output(outputs, output_shape)
-
-        # After layers have been build, the super class needs to initialized
-        super(WaveNet, self).__init__(inputs, outputs)
-
-    def build_input(self, input_shape):
-        """Return first layer of network."""
-        inputs = keras.layers.Input(shape=input_shape)
-        outputs_first = self.dropout_layer(temporal=True)(inputs)
-        outputs = keras.layers.Conv1D(
-            filters=self.filters,
-            kernel_size=2,
-            strides=1,
-            padding='causal',
-            dilation_rate=1,
-            use_bias=True,
-            name='dilated_1',
-            activation=self.activation
-        )(outputs_first)
-
-        skip = keras.layers.SeparableConv1D(
-            filters=self.filters,
-            kernel_size=1,
-            padding='same',
-            name='skip_1',
-            use_bias=True
-        )(outputs_first)
-        outputs = keras.layers.Add()([outputs, skip])
-
-        return inputs, outputs
-
-    def build_output(self, x, output_shape):
-        """Return last layer for network."""
-        x = self.dropout_layer(temporal=True)(x)
-        outputs = keras.layers.Conv1D(
-            filters=output_shape[1],
-            kernel_size=1,
-            padding='same',
-            name='skip_out',
-            use_bias=True
-        )(x)
-        outputs = keras.layers.Flatten()(outputs)
-        outputs = self.dropout_layer()(outputs)
-        outputs = keras.layers.Dense(units=np.prod(output_shape))(outputs)
-        outputs = keras.layers.Reshape(target_shape=output_shape)(outputs)
-
-        return outputs
-
-    def build_wavenet_block(self, x, power):
-        """Build core of the network."""
-        x = self.dropout_layer(temporal=True)(x)
-        outputs = keras.layers.Conv1D(
-            filters=self.filters,
-            kernel_size=2,
-            strides=1,
-            padding='causal',
-            dilation_rate=2 ** power,
-            use_bias=True,
-            name='dilated_%d' % (2 ** power),
-            activation=self.activation
-        )(x)
-        outputs = keras.layers.Add()([outputs, x])
-
-        return outputs
