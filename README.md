@@ -23,4 +23,8 @@ $ python setup.py install
 ## Examples
 - [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)
 
-## Authors: [Toby Bischoff](http://github.com/bischtob), Austin Gross, Shirley Ren, [Kenneth Tran](http://www.kentran.net)
+## Authors: 
+- [Toby Bischoff](http://github.com/bischtob)
+- Austin Gross
+- Shirley Ren 
+- [Kenneth Tran](http://www.kentran.net)
