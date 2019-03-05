@@ -6,32 +6,42 @@ from torch.utils.data import Sampler, Dataset, DataLoader
 
 
 class TimeSeriesDataset(Dataset):
-    """Class to handle time series datasets."""
+    """Class to handle time series datasets.
 
+    Take a list of time series and provides access to windowed subseries for training.
+    
+    :param time_series: list of time series arrays
+    :param lookback: length of time window used as input for forecasting
+    :param horizon: length of to be forecasted time series
+    :param step: time difference between consecutive examples
+    :param dropout_regularizer: Generally needs to be set to 2 / N, where N is the number of training examples
+    :param init_range: Initial range for dropout probabilities
+    :param channel_wise: Determines if dropout is appplied accross all input or across channels 
+
+    """
     def __init__(self, 
-            time_series, 
-            lookback, 
-            horizon, 
+            time_series: list, 
+            lookback: int, 
+            horizon: int, 
             step=1, 
             transform=None, 
-            static_covs=None, 
-            thinning=1.0):
-        """Initialize variables."""
+            static_covs=None):
         self.time_series = time_series
         self.lookback = lookback
         self.horizon = horizon
         self.step = step
         self.transform = transform
         self.static_covs = static_covs
-        self.thinning = thinning
 
-        # We need to identify each training example in the
-        # time series data set, so we assign an ID
+        # We need to identify each training example in the time series data set, so we assign an ID
         last_id = 0
         n_dropped = 0
         self.sample_ids = {}
         for i, ts in enumerate(self.time_series):
             num_examples = (ts.shape[-1] - self.lookback - self.horizon + self.step) // self.step
+
+            # Time series that are too short can be zero-padded but time series that are
+            # shorter than the forecast horizon need to be dropped.
             if ts.shape[-1] < self.lookback + self.horizon:
                 num_examples = 1 # If the time series is too short, we will zero pad the input
             if ts.shape[-1] < self.horizon:
@@ -49,7 +59,7 @@ class TimeSeriesDataset(Dataset):
         
     def __len__(self):
         # Returns the number of training examples
-        return int((max(self.sample_ids.keys()) + 1)*self.thinning)
+        return int(max(self.sample_ids.keys()) + 1)
 
     def __getitem__(self, idx):
         # Get time series
@@ -76,7 +86,7 @@ class TimeSeriesDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
 
-        # Static covariates can be attached
+        # Static covariates can be attached if available
         if self.static_covs is not None:
             sample['X_stat'] = self.static_covs[ts_id]
 
@@ -87,7 +97,6 @@ class LogTransform(object):
     """Takes the log of a target covariate."""
 
     def __init__(self, offset=0.0, targets=None):
-        """Initialize variables."""
         self.offset = offset
         self.targets = targets
 
@@ -115,7 +124,6 @@ class RemoveLast(object):
     """Remove last time series points from time series."""
 
     def __init__(self, targets=None):
-        """Initialize variables."""
         self.targets = targets
 
     def __call__(self, sample):
@@ -180,7 +188,6 @@ class Tensorize(object):
     """Convert ndarrays to Tensors."""
 
     def __init__(self, device='cpu'):
-        """Initialize variables."""
         self.device = torch.device(device)
 
     def __call__(self, sample):

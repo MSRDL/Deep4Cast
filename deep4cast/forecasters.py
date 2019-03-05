@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
 import torch
-import warnings
 
 import numpy as np
 
@@ -10,19 +9,30 @@ from inspect import getfullargspec
 
 
 class Forecaster():
-    """Forecaster class."""
+    """Forecaster Class.
 
+    Handles training of a PyTorch model. Can be used to generate samples from approximate posterior
+    predictive distribution.
+
+    :param model: PyTorch neural network model
+    :param loss: PyTorch distribution
+    :param optimizer: PyTorch optimizer
+    :param n_epochs: number of training epochs
+    :param device: device used for training (cpu or cuda)
+    :param checkpoint_path: path for writing model checkpoints
+    :param verbose: switch to toggle verbosity of forecaster during fitting
+    :param nan_budget: how many time the forecaster will try to continue batcvh training when NaN encountered
+
+    """
     def __init__(self,
                  model: torch.nn.Module,
-                 loss=torch.distributions.Distribution,
+                 loss=torch.distributions.Normal,
                  optimizer=torch.optim.Adam,
                  n_epochs=1,
                  device='cpu',
                  checkpoint_path='./',
                  verbose=True,
                  nan_budget=5):
-
-        # Initialize model and optimizer
         self.device = device if torch.cuda.is_available() and 'cuda' in device else 'cpu'
         self.model = model.to(device)
         self.optimizer = optimizer
@@ -31,8 +41,6 @@ class Forecaster():
         self.history = {'training': [], 'validation': []}
         self.checkpoint_path = checkpoint_path
         self.nan_budget = nan_budget
-        
-        # Flags
         self.verbose = verbose
 
     def fit(self, dataloader_train, dataloader_val=None, eval_model=False):
@@ -40,6 +48,7 @@ class Forecaster():
         if self.verbose:
             print('Number of model parameters being fitted: {}.'.format(self.model.n_parameters))
 
+        # Iterate over training epochs
         start_time = time.time()
         for epoch in range(1, self.n_epochs + 1):
             self.train(dataloader_train, epoch, start_time)
@@ -54,7 +63,7 @@ class Forecaster():
                 self.history['validation'].append(val_loss)
 
     def train(self, dataloader, epoch, start_time):
-        """Perform training for an epoch."""
+        """Perform training for one epoch."""
         n_trained = 0
         nan_budget = self.nan_budget
         for idx, batch in enumerate(dataloader):
@@ -67,6 +76,7 @@ class Forecaster():
             outputs = self.model(inputs)
             reg = outputs.pop('regularizer')
             loss = -self.loss(**outputs).log_prob(targets).mean() + reg
+            
             # We give the forecaster a chance to get out of NaNs using a budget
             if torch.isnan(loss):
                 nan_budget -= 1
@@ -79,7 +89,7 @@ class Forecaster():
             loss.backward()
             self.optimizer.step()
 
-            # Status update
+            # Status update for the user
             if self.verbose:
                 n_trained += len(inputs)
                 n_total = len(dataloader.dataset)
@@ -108,7 +118,7 @@ class Forecaster():
     def evaluate(self, dataloader, n_samples=1):
         """Evaluate a model on a dataset.
         
-        Returns the approximate min negative log likelihood of the model
+        Returns the approximate min negative log likelihood of the model averaged over dataset
 
         """
         max_llikelihood = [0]*n_samples
