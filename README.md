@@ -30,5 +30,5 @@ $ python setup.py install
 - [Kenneth Tran](http://www.kentran.net)
 
 ## References:
-- [Concrete Dropout](https://arxiv.org/pdf/1705.07832.pdf)
-- [Wavenet](https://arxiv.org/pdf/1609.03499.pdf)
+- [Concrete Dropout](https://arxiv.org/pdf/1705.07832.pdf) is used for approximate posterior Bayesian inference.
+- [Wavenet](https://arxiv.org/pdf/1609.03499.pdf) is used as encoder network.
