@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import argparse
 import os
@@ -55,6 +56,13 @@ def prepare_data(data_path):
     # Reset index
     df = df.reset_index(drop=True)
 
+    # Log transform count data
+    df['count'] = np.log1p(df['count'])
+
+    # Drop unnecessary columns
+    df = df.drop(['month', 'day', 'age'], axis=1)
+    df = df.dropna()
+
     return df
 
 
@@ -73,7 +81,7 @@ def run():
     path = os.path.dirname(args.output_path)
     if not os.path.exists(path):
         os.makedirs(path)
-    df.to_pickle(args.output_path)
+    df.to_pickle(args.output_path, protocol=4)
 
 
 if __name__ == '__main__':
