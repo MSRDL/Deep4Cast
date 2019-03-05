@@ -1,6 +1,6 @@
 ## Deep4cast: Forecasting for Decision Making under Uncertainty
 
-<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/pytorch/doc/images/thumb.jpg" height=200>
+<img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/master/doc/images/thumb.jpg" height=200>
 
 ***This package is under active development. Things may change :-).***
 
