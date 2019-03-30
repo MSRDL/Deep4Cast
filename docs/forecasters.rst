@@ -1,0 +1,5 @@
+Forecasters
+===========
+
+.. automodule:: forecasters
+  :members:

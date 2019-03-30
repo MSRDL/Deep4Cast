@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 import numpy as np
 
 
 def corr(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
-    """Computes the empirical correlation betnween actuals and predictions
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    """Returns the Pearson correlation coefficient betnween observed values
+    and aggregated predictions.
+        
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -17,10 +17,10 @@ def corr(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def mae(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes mean absolute error (MAE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+        
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -30,10 +30,10 @@ def mae(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def mape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes mean absolute percentage error (MAPE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -44,12 +44,12 @@ def mape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def mase(data_samples: np.array, data_truth: np.array, data_insample, frequencies, agg=None, **kwargs):
     """Computes mean absolute scaled error (MASE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param data_insample: Insample time series values
-    :param frequencies: Frequencies sued for seasonal naive forecast
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param data_insample: Insample time series values.
+    :param frequencies: Frequencies used for seasonal naive forecast.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -72,10 +72,10 @@ def mase(data_samples: np.array, data_truth: np.array, data_insample, frequencie
 
 def smape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes symmetric mean absolute percentage error (SMAPE) on the mean
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -88,10 +88,10 @@ def smape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def mse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes mean squared error (MSE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -101,10 +101,10 @@ def mse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def rmse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes root-mean squared error (RMSE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -114,10 +114,10 @@ def rmse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def rse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
     """Computes root relative squared error (RSE)
-    :param data: Predicted time series values (n_timesteps, n_timeseries)
-    :param data_truth: Ground truth time series values
-    :param agg: Aggregator function that creates forecast out of samples
-
+    
+    :param data: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param agg: Property of the forecast distribution to use for evaluation.
     """
     agg = np.median if not agg else agg
     data = agg(data_samples, axis=0)
@@ -128,9 +128,10 @@ def rse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
 
 def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **kwargs):
     """Computes coverage rates of the prediction interval.
-    :param data_samples: Samples of time series values
-    :param data_truth: Ground truth time series values
-    :param percentiles: Percentiles to compute coverage for
+    
+    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param percentiles: Percentiles to compute coverage for.
 
     """
     if percentiles is None:
@@ -148,10 +149,10 @@ def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **k
 
 def pinball_loss(data_samples: np.array, data_truth: np.array, percentiles=None, **kwargs):
     """Computes pinball loss.
-    :param data_samples: Samples of time series values
-    :param data_truth: Ground truth time series values
-    :param percentiles: Percentiles to compute coverage for
-
+    
+    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
+    :param data_truth: Actual values observed.
+    :param percentiles: Percentiles to compute coverage for.
     """
     if percentiles is None:
         percentiles = np.linspace(0, 100, 101)

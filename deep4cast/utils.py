@@ -1,23 +1,21 @@
-# -*- coding: utf-8 -*-
-import torch
 import numpy as np
-
+import torch
 from torch.utils.data import Sampler, Dataset, DataLoader
 
 
 class TimeSeriesDataset(Dataset):
-    """Class to handle time series datasets.
-
-    Take a list of time series and provides access to windowed subseries for training.
+    """Take a list of time series and provides access to windowed subseries for
+    training.
     
-    :param time_series: list of time series arrays
-    :param lookback: length of time window used as input for forecasting
-    :param horizon: length of to be forecasted time series
-    :param step: time difference between consecutive examples
-    :param dropout_regularizer: Generally needs to be set to 2 / N, where N is the number of training examples
-    :param init_range: Initial range for dropout probabilities
-    :param channel_wise: Determines if dropout is appplied accross all input or across channels 
-
+    :param time_series: List of time series arrays.
+    :param lookback: Length of time window used as input for forecasting.
+    :param horizon: Number of time steps to forecast.
+    :param step: Time step size between consecutive examples.
+    :param dropout_regularizer: Generally needs to be set to 2 / N, where N is
+        the number of training examples.
+    :param init_range: Initial range for dropout probabilities.
+    :param channel_wise: Determines if dropout is appplied accross all input or
+        across channels .
     """
     def __init__(self, 
             time_series: list, 
@@ -94,7 +92,7 @@ class TimeSeriesDataset(Dataset):
 
 
 class LogTransform(object):
-    """Takes the log of a target covariate."""
+    """Returns the natural logarithm of a target covariate."""
 
     def __init__(self, offset=0.0, targets=None):
         self.offset = offset
@@ -121,7 +119,7 @@ class LogTransform(object):
 
 
 class RemoveLast(object):
-    """Remove last time series points from time series."""
+    """Subtract last point from time series."""
 
     def __init__(self, targets=None):
         self.targets = targets
@@ -134,7 +132,7 @@ class RemoveLast(object):
         if self.targets:
             offset = X[self.targets, -1]
             X[self.targets, :] = X[self.targets, :] - offset[:, None]
-            y[self.targets, :]  = y[self.targets, :] - offset[:, None]
+            y[self.targets, :] = y[self.targets, :] - offset[:, None]
         else:
             offset = X[:, -1]
             X = X - offset[:, None]
@@ -149,10 +147,11 @@ class RemoveLast(object):
 
 
 class Standardize(object):
-    """Standardize time series."""
+    """Standardize time series by subtracting the mean and dividing by the
+        standard deviation.
+    """
 
     def __init__(self, targets=None):
-        """Initialize variables."""
         self.targets = targets
 
     def __call__(self, sample):

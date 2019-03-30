@@ -1,28 +1,24 @@
-# -*- coding: utf-8 -*-
+from inspect import getfullargspec
 import time
-import torch
+from typing import Union
 
 import numpy as np
-
-from typing import Union
-from inspect import getfullargspec
+import torch
 
 
 class Forecaster():
-    """Forecaster Class.
+    """Handles training of a PyTorch model. Can be used to generate samples
+    from approximate posterior predictive distribution.
 
-    Handles training of a PyTorch model. Can be used to generate samples from approximate posterior
-    predictive distribution.
-
-    :param model: PyTorch neural network model
+    :param model: PyTorch neural network model :ref:`models`
     :param loss: PyTorch distribution
     :param optimizer: PyTorch optimizer
     :param n_epochs: number of training epochs
     :param device: device used for training (cpu or cuda)
     :param checkpoint_path: path for writing model checkpoints
     :param verbose: switch to toggle verbosity of forecaster during fitting
-    :param nan_budget: how many time the forecaster will try to continue batcvh training when NaN encountered
-
+    :param nan_budget: how many time the forecaster will try to continue batcvh
+        training when NaN encountered.
     """
     def __init__(self,
                  model: torch.nn.Module,

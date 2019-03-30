@@ -1,28 +1,22 @@
-# -*- coding: utf-8 -*-
-import torch
 import numpy as np
+import torch
 import torch.nn.functional as F
 
-from . import custom_layers
+from deep4cast import custom_layers
+
 
 class WaveNet(torch.nn.Module):
-    """Implements DeepMind's WaveNet for time series forecasting.
-
-    The forward function returns the parameters for a Gaussian distribution.
-
-    :param input_channels: number of covariates in input time series
-    :param output_channels: number of covariates in target time series
-    :param horizon: length of to be forecasted time series
-    :param hidden_channels: Number of channels in convolutional layers for hidden layers
-    :param skip_channels: Number of channels in convolutional layers for skip connections
-    :param dense_units: Number of hidden units in final dense layer
-    :param n_layers: Number of layers per Wavenet block (determines receptive field size)
-    :param n_blocks: Number of Wavenet blocks 
-    :param dilation: dilation factor for temporal convolution
-
-    References
-        - [WaveNet: A Generative Model for Raw Audio](https://arxiv.org/pdf/1609.03499.pdf)
-
+    """:param input_channels: Number of covariates in input time series.
+    :param output_channels: Number of covariates in target time series.
+    :param horizon: Number of time steps for forecast.
+    :param hidden_channels: Number of channels in convolutional hidden layers.
+    :param skip_channels: Number of channels in convolutional layers for skip
+        connections.
+    :param dense_units: Number of hidden units in final dense layer.
+    :param n_layers: Number of layers per Wavenet block (determines receptive
+        field size).
+    :param n_blocks: Number of Wavenet blocks.
+    :param dilation: Dilation factor for temporal convolution.
     """
     def __init__(self,
                  input_channels: int,
@@ -84,6 +78,7 @@ class WaveNet(torch.nn.Module):
         self.linear_std = torch.nn.Linear(skip_channels, horizon*output_channels)
 
     def forward(self, inputs):
+        """Returns the parameters for a Gaussian distribution."""
         output, reg_e = self.encode(inputs)
         output_mean, output_std, reg_d = self.decode(output)
 
