@@ -47,7 +47,6 @@ wheels/
 # Misc
 __*/
 _*/
-Makefile
 .bin/
 .idea/
 *.pptx
