@@ -1,33 +1,17 @@
-# -*- coding: utf-8 -*-
-import torch
 import numpy as np
+import torch
 
 
 class ConcreteDropout(torch.nn.Module):
     """Applies Dropout to the input, even at prediction time.
 
-    Dropout randomly sets a fraction of input units to 0
-    at each update during training time, which helps prevent overfitting. At
-    prediction time the units are then also dropped out with the same fraction.
-    This generates samples from an approximate posterior predictive
-    distribution. Unlike in MCDropout, in Concrete Dropout the dropout rates
-    are learned from the data. This version of Concrete Dropout cannot be used 
-    with additional regularization.
-
-    :param dropout_regularizer: Generally needs to be set to 2 / N, where N is the number of training examples
-    :param init_range: Initial range for dropout probabilities
-    :param channel_wise: Determines if dropout is appplied accross all input or across channels 
-
-    References
-        - [Dropout: A Simple Way to Prevent Neural Networks from
-        Overfitting](http://www.cs.toronto.edu/~rsalakhu/papers/
-        srivastava14a.pdf)
-        - [MCDropout: Dropout as a Bayesian Approximation: Representing Model
-        Uncertainty in Deep Learning](https://arxiv.org/abs/1506.02142)
-        - [Concrete Dropout](https://papers.nips.cc/
-        paper/6949-concrete-dropout.pdf)
-
+    :param dropout_regularizer: Generally needs to be set to `2 / N`, where `N`
+        is the number of training examples.
+    :param init_range: Initial range for dropout probabilities.
+    :param channel_wise: Determines if dropout is appplied accross all input or
+        across channels.
     """
+
     def __init__(self,
                  dropout_regularizer=1e-5,
                  init_range=(0.1, 0.3),
@@ -44,6 +28,8 @@ class ConcreteDropout(torch.nn.Module):
             torch.empty(1).uniform_(init_min, init_max))
 
     def forward(self, x):
+        """Performs concrete dropout at every call.
+        """
         # Get the dropout probability
         p = torch.sigmoid(self.p_logit)
 
@@ -56,9 +42,11 @@ class ConcreteDropout(torch.nn.Module):
 
         # The size of the dropout regularization depends on the kind of input
         if self.channel_wise:
-            input_dim = x.shape[1]# Dropout only applied to channel dimension
+            # Dropout only applied to channel dimension
+            input_dim = x.shape[1]
         else:
-            input_dim = np.prod(x.shape[1:]) # Dropout applied to all dimensions
+            # Dropout applied to all dimensions
+            input_dim = np.prod(x.shape[1:])
         dropout_regularizer *= self.dropout_regularizer * input_dim
 
         return out, dropout_regularizer.mean()
