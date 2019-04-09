@@ -21,7 +21,7 @@ $ python setup.py install
 - [pytorch](http://pytorch.org) - version 1.0
 
 ## Examples
-- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/examples)
+- [Tutorial Notebooks](https://github.com/MSRDL/Deep4Cast/blob/master/docs/examples/github_forecasting.ipynb)
 
 ## Authors: 
 - [Toby Bischoff](http://github.com/bischtob)
