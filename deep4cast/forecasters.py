@@ -10,7 +10,7 @@ class Forecaster():
     """Handles training of a PyTorch model. Can be used to generate samples
     from approximate posterior predictive distribution.
 
-    :param model: PyTorch neural network model :ref:`models`
+    :param model: Deep4cast neural network of class :class:`models`
     :param loss: PyTorch distribution
     :param optimizer: PyTorch optimizer
     :param n_epochs: number of training epochs
@@ -47,18 +47,18 @@ class Forecaster():
         # Iterate over training epochs
         start_time = time.time()
         for epoch in range(1, self.n_epochs + 1):
-            self.train(dataloader_train, epoch, start_time)
-            self.save_checkpoint()            
+            self._train(dataloader_train, epoch, start_time)
+            self._save_checkpoint()            
             if eval_model:
-                train_loss = self.evaluate(dataloader_train)
+                train_loss = self._evaluate(dataloader_train)
                 if self.verbose: print('\nTraining error: {:1.2e}.'.format(train_loss))
                 self.history['training'].append(train_loss) 
             if dataloader_val:
-                val_loss = self.evaluate(dataloader_val)
+                val_loss = self._evaluate(dataloader_val)
                 if self.verbose: print('Validation error: {:1.2e}\n.'.format(val_loss))
                 self.history['validation'].append(val_loss)
 
-    def train(self, dataloader, epoch, start_time):
+    def _train(self, dataloader, epoch, start_time):
         """Perform training for one epoch."""
         n_trained = 0
         nan_budget = self.nan_budget
@@ -111,7 +111,7 @@ class Forecaster():
                     end=""
                 )            
 
-    def evaluate(self, dataloader, n_samples=1):
+    def _evaluate(self, dataloader, n_samples=1):
         """Evaluate a model on a dataset.
         
         Returns the approximate min negative log likelihood of the model averaged over dataset
@@ -152,7 +152,7 @@ class Forecaster():
 
         return predictions
 
-    def save_checkpoint(self):
+    def _save_checkpoint(self):
         """Save a complete PyTorch model checkpoint."""
         filename = self.checkpoint_path
         filename += 'checkpoint_model.pt'
