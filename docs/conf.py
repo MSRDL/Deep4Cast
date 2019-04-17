@@ -19,4 +19,4 @@ html_theme_options = {
 }
 autoclass_content = "both"
 use_system_site_packages = True
-autodoc_mock_imports = ["torch"]
+autodoc_mock_imports = ["numpy", "torch"]
