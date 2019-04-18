@@ -1,3 +1,4 @@
+import numpy as np
 from torch.utils.data import Dataset
 
 
@@ -52,10 +53,10 @@ class TimeSeriesDataset(Dataset):
             print(
                 "Dropped {}/{} time series due to length.".format(n_dropped, len(self.time_series))
             )
-        
+
     def __len__(self):
         # Returns the number of training examples
-        return int(max(self.sample_ids.keys()) + 1)
+        return self.sample_ids.__len__()
 
     def __getitem__(self, idx):
         # Get time series

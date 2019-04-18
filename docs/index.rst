@@ -9,7 +9,7 @@ Decision making incorporating uncertainty.
 
 ``Deep4Cast`` is a scalable machine learning package implemented in ``Python`` and ``Torch``. It has a front-end API similar to ``scikit-learn``. It is designed for medium to large time series data sets and allows for modeling of forecast uncertainties.
 
-The network architecture is based on DeepMind's WaveNet. Regularization and approximate sampling from posterior predictive distributions of forecasts are achieved via Concrete Dropout.
+The network architecture is based on ``WaveNet``. Regularization and approximate sampling from posterior predictive distributions of forecasts are achieved via ``Concrete Dropout``.
 
 Examples
 --------
@@ -21,7 +21,6 @@ Authors
 -------
 - `Toby Bischoff <http://github.com/bischtob>`_
 - Austin Gross
-- Shirley Ren 
 - `Kenneth Tran <http://www.kentran.net>`_
 
 
@@ -34,6 +33,7 @@ References
 .. toctree::
     :maxdepth: 2
     :glob:
+    :hidden:
 
     get_started
     examples/*

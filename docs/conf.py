@@ -18,3 +18,5 @@ html_theme_options = {
     "style_nav_header_background" : "#3176BB"
 }
 autoclass_content = "both"
+use_system_site_packages = True
+autodoc_mock_imports = ["numpy", "torch"]
