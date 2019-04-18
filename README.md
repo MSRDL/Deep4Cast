@@ -1,4 +1,4 @@
-## Deep4cast: Forecasting for Decision Making under Uncertainty
+# Deep4cast: Forecasting for Decision Making under Uncertainty
 
 <img src="https://raw.githubusercontent.com/MSRDL/Deep4Cast/master/docs/images/thumb.jpg" height=200>
 
