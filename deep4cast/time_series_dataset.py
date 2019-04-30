@@ -1,6 +1,8 @@
 import numpy as np
 from torch.utils.data import Dataset
 
+from deep4cast import transforms
+
 
 class TimeSeriesDataset(Dataset):
     """Take a list of time series and provides access to windowed subseries for
@@ -17,12 +19,13 @@ class TimeSeriesDataset(Dataset):
         across channels .
     """
     def __init__(self, 
-            time_series: list, 
-            lookback: int, 
-            horizon: int, 
-            step=1, 
-            transform=None, 
-            static_covs=None):
+                 time_series: list,
+                 lookback: int,
+                 horizon: int,
+                 step=1, 
+                 transform=None, 
+                 static_covs=None):
+        """Initialize variables."""
         self.time_series = time_series
         self.lookback = lookback
         self.horizon = horizon
@@ -30,17 +33,18 @@ class TimeSeriesDataset(Dataset):
         self.transform = transform
         self.static_covs = static_covs
 
-        # We need to identify each training example in the time series data set, so we assign an ID
+        # We need to identify each training example in the
+        # time series data set, so we assign an ID
         last_id = 0
         n_dropped = 0
         self.sample_ids = {}
         for i, ts in enumerate(self.time_series):
             num_examples = (ts.shape[-1] - self.lookback - self.horizon + self.step) // self.step
-
-            # Time series that are too short can be zero-padded but time series that are
-            # shorter than the forecast horizon need to be dropped.
+            # Time series that are too short can be zero-padded but time 
+            # series that are shorter than the forecast horizon need to be dropped.
             if ts.shape[-1] < self.lookback + self.horizon:
-                num_examples = 1 # If the time series is too short, we will zero pad the input
+                # If the time series is too short, we will zero pad the input
+                num_examples = 1
             if ts.shape[-1] < self.horizon:
                 n_dropped += 1
                 continue
@@ -49,14 +53,15 @@ class TimeSeriesDataset(Dataset):
             last_id += num_examples
 
         # Inform user about time series that were too short
-        if n_dropped:
+        if n_dropped > 0:
             print(
                 "Dropped {}/{} time series due to length.".format(n_dropped, len(self.time_series))
             )
+        # Stores the number of training examples
+        self._len = self.sample_ids.__len__()
 
     def __len__(self):
-        # Returns the number of training examples
-        return self.sample_ids.__len__()
+        return self._len
 
     def __getitem__(self, idx):
         # Get time series
@@ -80,11 +85,32 @@ class TimeSeriesDataset(Dataset):
 
         # Create the input and output for the sample
         sample = {'X': X, 'y': y}
-        if self.transform:
-            sample = self.transform(sample)
+        sample = self._compose(sample)
 
-        # Static covariates can be attached if available
+        # Static covariates can be attached
         if self.static_covs is not None:
             sample['X_stat'] = self.static_covs[ts_id]
+
+        return sample
+
+    def _compose(self, sample):
+        for item in self.transform:
+            for k, v in item.items():
+                if v is None:
+                    t = getattr(transforms, k)()
+                else:
+                    t = getattr(transforms, k)(**v)
+                sample = t.do(sample)
+        
+        return sample
+
+    def uncompose(self, sample):
+        for item in self.transform[::-1]:
+            for k, v in item.items():
+                if v is None:
+                    t = getattr(transforms, k)()
+                else:
+                    t = getattr(transforms, k)(**v)
+                sample = t.undo(sample)
 
         return sample

@@ -1,6 +1,4 @@
-from inspect import getfullargspec
 import time
-from typing import Union
 
 import numpy as np
 import torch
@@ -17,7 +15,7 @@ class Forecaster():
     :param device: device used for training (cpu or cuda)
     :param checkpoint_path: path for writing model checkpoints
     :param verbose: switch to toggle verbosity of forecaster during fitting
-    :param nan_budget: how many time the forecaster will try to continue batcvh
+    :param nan_budget: how many time the forecaster will try to continue batch
         training when NaN encountered.
     """
     def __init__(self,
@@ -72,7 +70,7 @@ class Forecaster():
             outputs = self.model(inputs)
             reg = outputs.pop('regularizer')
             loss = -self.loss(**outputs).log_prob(targets).mean() + reg
-            
+
             # We give the forecaster a chance to get out of NaNs using a budget
             if torch.isnan(loss):
                 nan_budget -= 1
@@ -145,13 +143,32 @@ class Forecaster():
                 for i in range(n_samples):
                     outputs = self.model(inputs)
                     outputs.pop('regularizer')
-                    samples.append(self.loss(**outputs).sample((1,)).cpu().numpy())
+                    outputs = self.loss(**outputs).sample((1,)).cpu()
+                    batch['y'] = outputs[0]
+                    batch = dataloader.dataset.uncompose(batch)
+                    samples.append(outputs)
                 samples = np.concatenate(samples, axis=0)
                 predictions.append(samples)
             predictions = np.concatenate(predictions, axis=1)
 
         return predictions
 
+    def embed(self, dataloader, n_samples=100):
+        """Generate embedding vectors."""
+        with torch.no_grad():
+            predictions = []
+            for batch in dataloader:
+                inputs = batch['X'].to(self.device)
+                samples = []
+                for i in range(n_samples):
+                    outputs, __ = self.model.encode(inputs)
+                    samples.append(outputs.cpu().numpy())
+                samples = np.array(samples)
+                predictions.append(samples)
+            predictions = np.concatenate(predictions, axis=1)
+
+        return predictions
+    
     def _save_checkpoint(self):
         """Save a complete PyTorch model checkpoint."""
         filename = self.checkpoint_path

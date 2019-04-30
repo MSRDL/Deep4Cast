@@ -2,8 +2,8 @@ import numpy as np
 
 
 def corr(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
-    """Returns the Pearson correlation coefficient betnween observed values
-    and aggregated predictions.
+    """Returns the `Pearson correlation coefficient <https://en.wikipedia.org/wiki/Pearson_correlation_coefficient>`_
+    between observed values and aggregated predictions.
         
     :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
     :param data_truth: Actual values observed.
@@ -132,7 +132,6 @@ def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **k
     :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
     :param data_truth: Actual values observed.
     :param percentiles: Percentiles to compute coverage for.
-
     """
     if percentiles is None:
         percentiles = [0.5, 2.5, 5, 25, 50, 75, 95, 97.5, 99.5]
@@ -148,7 +147,15 @@ def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **k
 
 
 def pinball_loss(data_samples: np.array, data_truth: np.array, percentiles=None, **kwargs):
-    """Computes pinball loss.
+    """Computes pinball loss of a quantile :math:`\\tau` given the actual value
+    :math:`y` and the predicted quantile :math:`z`.
+
+    .. math::
+        L_{\\tau} ( y , z ) =
+        \\begin{cases}
+            & ( y - z ) \\tau &\mbox{if } y \geq z \\\\
+            & ( z - y ) ( 1 - \\tau ) &\mbox{if } z > y
+        \\end{cases}
     
     :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
     :param data_truth: Actual values observed.
