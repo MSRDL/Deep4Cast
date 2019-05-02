@@ -1,15 +1,17 @@
-import numpy as np
 import torch
 
 
 class LogTransform(object):
-    """Returns the natural logarithm of a target covariate."""
+    """Natural logarithm of target covariate + `offset`.
+    
+    .. math:: y_i = log_e ( x_i + \mbox{offset} )
+    """
 
     def __init__(self, offset=0.0, targets=None):
         self.offset = offset
         self.targets = targets
 
-    def __call__(self, sample):
+    def do(self, sample):
         output = sample
         X = sample['X']
         y = sample['y']
@@ -24,18 +26,39 @@ class LogTransform(object):
 
         output['X'] = X
         output['y'] = y
-        output[self.__class__.__name__ + '_offset'] = self.offset
+        output['LogTransform_offset'] = self.offset
+        output['LogTransform_targets'] = self.targets
+
+        return output
+    
+    def undo(self, sample):
+        output = sample
+        X, y = output['X'], output['y']
+        offset = output['LogTransform_offset']
+
+        if output['LogTransform_targets']:
+            targets = output['LogTransform_targets'][0].tolist()
+            X[:, targets, :] = torch.exp(
+                X[:, targets, :]) - offset[:, None].float()
+            y[:, targets, :] = torch.exp(
+                y[:, targets, :]) - offset[:, None].float()
+        else:
+            X = torch.exp(X) - offset[:, None].float()
+            y = torch.exp(y) - offset[:, None].float()
+        
+        output['X'] = X
+        output['y'] = y
 
         return output
 
 
 class RemoveLast(object):
-    """Subtract last point from time series."""
+    """Subtract last time series points from time series."""
 
     def __init__(self, targets=None):
         self.targets = targets
 
-    def __call__(self, sample):
+    def do(self, sample):
         output = sample
         X, y = sample['X'], sample['y']
 
@@ -51,57 +74,38 @@ class RemoveLast(object):
 
         output['X'] = X
         output['y'] = y
-        output[self.__class__.__name__ + '_offset'] = offset
-        output[self.__class__.__name__ + '_targets'] = self.targets
-        
+        output['RemoveLast_offset'] = offset
+        output['RemoveLast_targets'] = self.targets
+
         return output
+    
+    def undo(self, sample):
+        output = sample
+        X, y = output['X'], output['y']
+        offset = output['RemoveLast_offset']
 
-
-class Standardize(object):
-    """Standardize time series by subtracting the mean and dividing by the
-        standard deviation.
-    """
-
-    def __init__(self, targets=None):
-        self.targets = targets
-
-    def __call__(self, sample):
-        output = sample.copy()
-        X, y = sample['X'], sample['y']
-
-        # Remove mean from X and y and rescale by standard deviation
-        if self.targets:
-            mean = X[self.targets, :].mean(dim=1)
-            std = X[self.targets, :].std(dim=1)
-            X[self.targets, :] -= mean[:, None]
-            X[self.targets, :] /= std[:, None]
-            y[self.targets, :] -= mean[:, None]
-            y[self.targets, :] /= std[:, None]
+        if output['RemoveLast_targets']:
+            targets = output['RemoveLast_targets'][0].tolist()
+            X[:, targets, :] = X[:, targets, :] + offset[:, None].float()
+            y[:, targets, :] = y[:, targets, :] + offset[:, None].float()
         else:
-            mean = X.mean(dim=1)
-            std = X.std(dim=1)
-            X -= mean[:, None]
-            X /= std[:, None]
-            y -= mean[:, None]
-            y /= std[:, None]
+            X += offset[:, None].float()
+            y += offset[:, None].float()
 
         output['X'] = X
         output['y'] = y
-        output[self.__class__.__name__ + '_mean'] = mean
-        output[self.__class__.__name__ + '_std'] = std
-        output[self.__class__.__name__ + '_targets'] = self.targets
-        
+
         return output
 
 
 class Tensorize(object):
-    """Convert ndarrays to Tensors."""
+    """Convert `ndarrays` to Tensors."""
 
     def __init__(self, device='cpu'):
         self.device = torch.device(device)
 
-    def __call__(self, sample):
-        output = sample.copy()
+    def do(self, sample):
+        output = sample
         X, y = sample['X'], sample['y']
 
         output['X'] = torch.tensor(X, device=self.device).float()
@@ -109,14 +113,17 @@ class Tensorize(object):
 
         return output
 
+    def undo(self, sample):
+        return sample
+
 
 class Target(object):
-    """Only keep target covariates for output."""
+    """Retain only target covariates for output."""
 
     def __init__(self, targets):
         self.targets = targets
 
-    def __call__(self, sample):
+    def do(self, sample):
         output = sample.copy()
         y = sample['y']
 
@@ -125,3 +132,5 @@ class Target(object):
         
         return output
 
+    def undo(self, sample):
+        return sample
