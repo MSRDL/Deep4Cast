@@ -18,11 +18,11 @@ class LogTransform(object):
 
         # Remove offset from X and y
         if self.targets:
-            X[self.targets, :] = torch.log(self.offset + X[self.targets, :]) 
-            y[self.targets, :] = torch.log(self.offset + y[self.targets, :]) 
+            X[self.targets, :] = torch.log(self.offset + X[self.targets, :])
+            y[self.targets, :] = torch.log(self.offset + y[self.targets, :])
         else:
-            X = torch.log(self.offset + X) 
-            y = torch.log(self.offset + y) 
+            X = torch.log(self.offset + X)
+            y = torch.log(self.offset + y)
 
         output['X'] = X
         output['y'] = y
@@ -30,22 +30,23 @@ class LogTransform(object):
         output['LogTransform_targets'] = self.targets
 
         return output
-    
+
     def undo(self, sample):
         output = sample
         X, y = output['X'], output['y']
         offset = output['LogTransform_offset']
+        y_dim = y.shape[1]
 
         if output['LogTransform_targets']:
-            targets = output['LogTransform_targets'][0].tolist()
-            X[:, targets, :] = torch.exp(
-                X[:, targets, :]) - offset[:, None].float()
-            y[:, targets, :] = torch.exp(
-                y[:, targets, :]) - offset[:, None].float()
+            targets = [t.unique() for t in output['LogTransform_targets']]
+            x_targets = targets
+            y_targets = targets[:y_dim]
+            X[:, x_targets, :] = torch.exp(X[:, x_targets, :]) - offset[:, None, None].float()
+            y[:, y_targets, :] = torch.exp(y[:, y_targets, :]) - offset[:, None, None].float()
         else:
-            X = torch.exp(X) - offset[:, None].float()
-            y = torch.exp(y) - offset[:, None].float()
-        
+            X = torch.exp(X) - offset[:, :, None].float()
+            y = torch.exp(y) - offset[:, :, None].float()
+
         output['X'] = X
         output['y'] = y
 
@@ -78,19 +79,22 @@ class RemoveLast(object):
         output['RemoveLast_targets'] = self.targets
 
         return output
-    
+
     def undo(self, sample):
         output = sample
         X, y = output['X'], output['y']
         offset = output['RemoveLast_offset']
+        y_dim = y.shape[1]
 
         if output['RemoveLast_targets']:
-            targets = output['RemoveLast_targets'][0].tolist()
-            X[:, targets, :] = X[:, targets, :] + offset[:, None].float()
-            y[:, targets, :] = y[:, targets, :] + offset[:, None].float()
+            targets = [t.unique() for t in output['RemoveLast_targets']]
+            x_targets = targets
+            y_targets = targets[:y_dim]
+            X[:, x_targets, :] = X[:, x_targets, :] + offset[:, x_targets, None].float()
+            y[:, y_targets, :] = y[:, y_targets, :] + offset[:, y_targets, None].float()
         else:
-            X += offset[:, None].float()
-            y += offset[:, None].float()
+            X += offset[:, :, None].float()
+            y += offset[:, :, None].float()
 
         output['X'] = X
         output['y'] = y
@@ -129,7 +133,8 @@ class Target(object):
 
         # Targetize
         output['y'] = y[self.targets, :]
-        
+        output['targets'] = self.targets
+
         return output
 
     def undo(self, sample):
