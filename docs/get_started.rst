@@ -2,6 +2,8 @@
 Getting Started
 ===============
 
+Deep4Cast is a deep learning-based forecasting solution based on PyTorch. It can be used to build forecasters based on PyTorch models that are trained over large sets of time series.
+
 Main Requirements
 =================
 
@@ -19,3 +21,4 @@ From the package directory install the requirements and then the package.
 
     $ pip install -r requirements.txt
     $ python setup.py install
+

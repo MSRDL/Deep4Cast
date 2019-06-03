@@ -2,8 +2,8 @@
 Deep4Cast Documentation
 =======================
 
-Decision making incorporating uncertainty.
-==========================================
+Forecasting for decision making under uncertainty
+=================================================
 
 **This package is under active development. Things may change :-).**
 
@@ -16,6 +16,9 @@ Examples
 
 :ref:`/examples/github_forecasting.ipynb`
 
+Benchmark performance
+---------------------
+- M4 forecasting competition dataset
 
 Authors
 -------
@@ -37,9 +40,10 @@ References
 
     get_started
     examples/*
-    dataset
+    datasets
     transforms
     models
     forecasters
     metrics
+    custom_layers
 
