@@ -6,17 +6,25 @@ from deep4cast import custom_layers
 
 
 class WaveNet(torch.nn.Module):
-    """:param input_channels: Number of covariates in input time series.
-    :param output_channels: Number of covariates in target time series.
-    :param horizon: Number of time steps for forecast.
-    :param hidden_channels: Number of channels in convolutional hidden layers.
-    :param skip_channels: Number of channels in convolutional layers for skip
-        connections.
-    :param dense_units: Number of hidden units in final dense layer.
-    :param n_layers: Number of layers per Wavenet block (determines receptive
-        field size).
-    :param n_blocks: Number of Wavenet blocks.
-    :param dilation: Dilation factor for temporal convolution.
+    """Implements a WaveNet-like architecure for forecasting puposes. Forecasts are made
+    vectorially via a fully-connected layer.
+    
+    Implements `WaveNet` architecture for time series forecasting. Requires access to `pytorch Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ class as all models inherit from `Module`.
+
+    References:
+    - `WaveNet: A Generative Model for Raw Audio <https://arxiv.org/pdf/1609.03499.pdf>`_
+    
+    Arguments:
+        * input_channels: Number of covariates in input time series.
+        * output_channels: Number of covariates in target time series.
+        * horizon: Number of time steps for forecast.
+        * hidden_channels: Number of channels in convolutional hidden layers.
+        * skip_channels: Number of channels in convolutional layers for skip connections.
+        * dense_units: Number of hidden units in final dense layer.
+        * n_layers: Number of layers per Wavenet block (determines receptive field size).
+        * n_blocks: Number of Wavenet blocks.
+        * dilation: Dilation factor for temporal convolution.
+    
     """
     def __init__(self,
                  input_channels: int,
@@ -77,8 +85,13 @@ class WaveNet(torch.nn.Module):
         self.linear_mean = torch.nn.Linear(skip_channels, horizon*output_channels)
         self.linear_std = torch.nn.Linear(skip_channels, horizon*output_channels)
 
-    def forward(self, inputs):
-        """Returns the parameters for a Gaussian distribution."""
+    def forward(self, inputs: torch.Tensor):
+        """Returns forecasts given an input time series.
+        
+        Arguments:
+            * inputs: time series input to make forecasts for
+
+        """
         output, reg_e = self.encode(inputs)
         output_mean, output_std, reg_d = self.decode(output)
 
@@ -87,8 +100,13 @@ class WaveNet(torch.nn.Module):
 
         return {'loc': output_mean, 'scale': output_std, 'regularizer': regularizer}
 
-    def encode(self, inputs):
-        """Encoder part of the architecture."""
+    def encode(self, inputs: torch.Tensor):
+        """Returns embedding vectors.
+        
+        Arguments:
+            * inputs: time series input to make forecasts for
+
+        """
         # Input layer
         output, res_conv_input = self.do_conv_input(inputs)
         output = self.conv_input(output)
@@ -125,8 +143,13 @@ class WaveNet(torch.nn.Module):
 
         return output, regularizer
 
-    def decode(self, inputs):
-        """Decoder part of the architecture."""
+    def decode(self, inputs: torch.Tensor):
+        """Returns forecasts based on embedding vectors.
+        
+        Arguments:
+            * inputs: embedding vectors to generate forecasts for
+
+        """
         # Apply dense layer to match output length
         output_mean, res_linear_mean = self.do_linear_mean(inputs)
         output_std, res_linear_std = self.do_linear_std(inputs)
@@ -150,13 +173,13 @@ class WaveNet(torch.nn.Module):
 
     @property
     def n_parameters(self):
-        """Return the number of parameters of model."""
+        """Returns the number of model parameters."""
         par = list(self.parameters())
         s = sum([np.prod(list(d.size())) for d in par])
         return s
 
     @property
     def receptive_field_size(self):
-        """Return the length of the receptive field."""
+        """Returns the length of the receptive field."""
         return self.dilation * max(self.dilations)
 

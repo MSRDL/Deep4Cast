@@ -1,22 +1,22 @@
 import time
+import torch
 
 import numpy as np
-import torch
 
 
 class Forecaster():
-    """Handles training of a PyTorch model. Can be used to generate samples
+    """Handles training of a PyTorch model and can be used to generate samples
     from approximate posterior predictive distribution.
 
-    :param model: Deep4cast neural network of class :class:`models`
-    :param loss: PyTorch distribution
-    :param optimizer: PyTorch optimizer
-    :param n_epochs: number of training epochs
-    :param device: device used for training (cpu or cuda)
-    :param checkpoint_path: path for writing model checkpoints
-    :param verbose: switch to toggle verbosity of forecaster during fitting
-    :param nan_budget: how many time the forecaster will try to continue batch
-        training when NaN encountered.
+    Arguments:
+        * model: Deep4cast neural network of class :class:`models`
+        * loss: PyTorch distribution (e.g., Normal)
+        * optimizer: PyTorch optimizer (e.g., Adam)
+        * n_epochs: number of training epochs
+        * device: device used for training (cpu or cuda)
+        * checkpoint_path: path for writing model checkpoints
+        * verbose: switch to toggle verbosity of forecaster during fitting
+    
     """
     def __init__(self,
                  model: torch.nn.Module,
@@ -25,8 +25,7 @@ class Forecaster():
                  n_epochs=1,
                  device='cpu',
                  checkpoint_path='./',
-                 verbose=True,
-                 nan_budget=5):
+                 verbose=True):
         self.device = device if torch.cuda.is_available() and 'cuda' in device else 'cpu'
         self.model = model.to(device)
         self.optimizer = optimizer
@@ -34,11 +33,17 @@ class Forecaster():
         self.loss = loss
         self.history = {'training': [], 'validation': []}
         self.checkpoint_path = checkpoint_path
-        self.nan_budget = nan_budget
         self.verbose = verbose
 
-    def fit(self, dataloader_train, dataloader_val=None, eval_model=False):
-        """Fit model to data."""
+    def fit(self, dataloader_train: torch.utils.data.DataLoader, dataloader_val=None, eval_model=False):
+        """Fits a model to a given a dataset.
+        
+        Arguments:
+            * dataloader_train: training data as PyTorch :class:`DataLoader`
+            * dataloader_val: validation data as PyTorch :class:`DataLoader`
+            * eval_model: Flag to switch on model evaluation after every epoch
+        
+        """
         if self.verbose:
             print('Number of model parameters being fitted: {}.'.format(self.model.n_parameters))
 
@@ -59,7 +64,6 @@ class Forecaster():
     def _train(self, dataloader, epoch, start_time):
         """Perform training for one epoch."""
         n_trained = 0
-        nan_budget = self.nan_budget
         for idx, batch in enumerate(dataloader):
             # Send batch to device
             inputs = batch['X'].to(self.device)
@@ -70,16 +74,8 @@ class Forecaster():
             outputs = self.model(inputs)
             reg = outputs.pop('regularizer')
             loss = -self.loss(**outputs).log_prob(targets).mean() + reg
-
-            # We give the forecaster a chance to get out of NaNs using a budget
             if torch.isnan(loss):
-                nan_budget -= 1
-                if not nan_budget:
-                    raise ValueError('NaN in training loss. NaN budget depleted.')
-                else:
-                    continue
-            else:
-                nan_budget = self.nan_budget
+                raise ValueError('NaN in training loss. NaN budget depleted.')
             loss.backward()
             self.optimizer.step()
 
@@ -109,7 +105,7 @@ class Forecaster():
                     end=""
                 )            
 
-    def _evaluate(self, dataloader, n_samples=1):
+    def _evaluate(self, dataloader, n_samples=10):
         """Evaluate a model on a dataset.
         
         Returns the approximate min negative log likelihood of the model averaged over dataset
@@ -133,8 +129,14 @@ class Forecaster():
             
         return -max_llikelihood / len(dataloader.dataset)
 
-    def predict(self, dataloader, n_samples=100):
-        """Generate predictions."""
+    def predict(self, dataloader: torch.utils.data.DataLoader, n_samples=100) -> np.array:
+        """Generates predictions.
+
+        Arguments:
+            * dataloader: data to make forecasts for as PyTorch :class:`DataLoader`
+            * n_samples: Number of forecast samples
+        
+        """
         with torch.no_grad():
             predictions = []
             for batch in dataloader:
@@ -153,8 +155,14 @@ class Forecaster():
 
         return predictions
 
-    def embed(self, dataloader, n_samples=100):
-        """Generate embedding vectors."""
+    def embed(self, dataloader: torch.utils.data.DataLoader, n_samples=100) -> np.array:
+        """Generate embedding vectors.
+
+        Arguments:
+            * dataloader: data to make embedding vectors for as PyTorch :class:`DataLoader`
+            * n_samples: Number of forecast samples
+        
+        """
         with torch.no_grad():
             predictions = []
             for batch in dataloader:
