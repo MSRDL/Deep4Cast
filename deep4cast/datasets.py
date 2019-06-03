@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -6,17 +7,15 @@ from deep4cast import transforms
 
 class TimeSeriesDataset(Dataset):
     """Take a list of time series and provides access to windowed subseries for
-    training.
-    
-    :param time_series: List of time series arrays.
-    :param lookback: Length of time window used as input for forecasting.
-    :param horizon: Number of time steps to forecast.
-    :param step: Time step size between consecutive examples.
-    :param dropout_regularizer: Generally needs to be set to 2 / N, where N is
-        the number of training examples.
-    :param init_range: Initial range for dropout probabilities.
-    :param channel_wise: Determines if dropout is appplied accross all input or
-        across channels .
+    training in form of a PyTorch `Dataset`. 
+
+    Arguments:  
+        * time_series: List of time series arrays.
+        * lookback: Length of time window used as input for forecasting.
+        * horizon: Number of time steps to forecast.
+        * step: Time step size between consecutive examples.
+        * static_covs: list of static covariates for each time series in 'time_series' list.
+
     """
     def __init__(self, 
                  time_series: list,
@@ -93,7 +92,7 @@ class TimeSeriesDataset(Dataset):
 
         return sample
 
-    def _compose(self, sample):
+    def _compose(self, sample: torch.Tensor):
         for item in self.transform:
             for k, v in item.items():
                 if v is None:
@@ -104,7 +103,13 @@ class TimeSeriesDataset(Dataset):
         
         return sample
 
-    def uncompose(self, sample):
+    def uncompose(self, sample: torch.Tensor) -> np.array:
+        """Untranforms the data.
+        
+        Arguments:
+            * sample: sample to transform
+        
+        """
         for item in self.transform[::-1]:
             for k, v in item.items():
                 if v is None:
