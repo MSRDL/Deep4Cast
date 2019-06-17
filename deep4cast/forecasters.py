@@ -1,3 +1,4 @@
+import copy
 import time
 
 import numpy as np
@@ -145,8 +146,9 @@ class Forecaster():
                     outputs.pop('regularizer')
                     outputs = self.loss(**outputs).sample((1,)).cpu()
                     batch['y'] = outputs[0]
-                    batch = dataloader.dataset.uncompose(batch)
-                    samples.append(outputs)
+                    outputs = copy.deepcopy(batch)
+                    outputs = dataloader.dataset.uncompose(outputs)
+                    samples.append(outputs['y'][None, :])
                 samples = np.concatenate(samples, axis=0)
                 predictions.append(samples)
             predictions = np.concatenate(predictions, axis=1)
