@@ -21,9 +21,6 @@ Examples
 
 :ref:`/examples/m4daily.ipynb`
 
-Benchmark performance
----------------------
-- M4 forecasting competition dataset
 
 Authors
 -------
