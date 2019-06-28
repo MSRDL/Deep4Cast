@@ -11,7 +11,7 @@ class ConcreteDropout(torch.nn.Module):
     
     Arguments:
         * dropout_regularizer (float): Should  be set to 2 / N, where N is the number of training examples.
-        * init_range (list): Initial range for dropout probabilities.
+        * init_range (tuple): Initial range for dropout probabilities.
         * channel_wise (boolean): apply dropout over all input or across convolutional channels.
 
     """

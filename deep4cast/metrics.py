@@ -2,13 +2,13 @@ import numpy as np
 import warnings
 
 
-def mae(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
+def mae(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean absolute error (MAE)
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -21,13 +21,13 @@ def mae(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
     return np.mean(np.abs(data - data_truth), axis=(1, 2))
 
 
-def mape(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
+def mape(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean absolute percentage error (MAPE)
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -42,20 +42,20 @@ def mape(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
     return np.mean(np.abs(data - data_truth) / norm, axis=(1, 2)) * 100.0
 
 
-def mase(data_samples:np.array, 
-         data_truth:np.array, 
-         data_insample:np.array, 
-         frequencies:list, 
+def mase(data_samples, 
+         data_truth, 
+         data_insample, 
+         frequencies, 
          agg=None) -> np.array:
     """Computes mean absolute scaled error (MASE) as in the `M4 competition
     <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * data_insample: in-sample time series data (n_timeseries, n_variables, n_timesteps)
-        * frequencies: frequencies to be used when calculating the naive forecast
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * data_insample (``np.array``): In-sample time series data (n_timeseries, n_variables, n_timesteps).
+        * frequencies (list): Frequencies to be used when calculating the naive forecast.
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -90,13 +90,13 @@ def mase(data_samples:np.array,
     return errs / naive_errs
 
 
-def smape(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
+def smape(data_samples, data_truth, agg=None) -> np.array:
     """Computes symmetric mean absolute percentage error (SMAPE) on the mean
     
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -112,13 +112,13 @@ def smape(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
     return np.mean(np.abs(data - data_truth) / norm, axis=(1, 2)) * 100
 
 
-def mse(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
+def mse(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean squared error (MSE)
     
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -131,13 +131,13 @@ def mse(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
     return np.mean(np.square((data - data_truth)), axis=(1, 2))
 
 
-def rmse(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
+def rmse(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean squared error (RMSE)
     
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * agg: sample aggregation function
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -150,13 +150,13 @@ def rmse(data_samples:np.array, data_truth:np.array, agg=None) -> np.array:
     return np.sqrt(mse(data, data_truth))
 
 
-def coverage(data_samples:np.array, data_truth:np.array, percentiles=None) -> list:
+def coverage(data_samples, data_truth, percentiles=None) -> list:
     """Computes coverage rates of the prediction interval.
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * percentiles: list of percentiles to calculate coverage for
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * percentiles (list): percentiles to calculate coverage for
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -174,13 +174,13 @@ def coverage(data_samples:np.array, data_truth:np.array, percentiles=None) -> li
     return coverage_percentages
 
 
-def pinball_loss(data_samples:np.array, data_truth:np.array, percentiles=None) -> np.array:
+def pinball_loss(data_samples, data_truth, percentiles=None) -> np.array:
     """Computes pinball loss.
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * percentiles: list of percentiles to calculate coverage for
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * percentiles (list): Percentiles used to calculate coverage.
 
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -207,20 +207,20 @@ def pinball_loss(data_samples:np.array, data_truth:np.array, percentiles=None) -
     return np.round(total / len(percentiles), 3)
 
 
-def msis(data_samples:np.array, 
-         data_truth:np.array, 
-         data_insample:np.array, 
-         frequencies:list, 
+def msis(data_samples, 
+         data_truth, 
+         data_insample, 
+         frequencies, 
          alpha=0.05) -> np.array:
     """Mean Scaled Interval Score (MSIS) as shown in the `M4 competition 
     <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
 
     Arguments:
-        * data_samples: sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps)
-        * data_truth: ground truth time series values (n_timeseries, n_variables, n_timesteps)
-        * data_insample: in-sample time series data (n_timeseries, n_variables, n_timesteps)
-        * frequencies: frequencies to be used when calculating the naive forecast
-        * alpha: significance level
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * data_insample (``np.array``): In-sample time series data (n_timeseries, n_variables, n_timesteps).
+        * frequencies (list): Frequencies to be used when calculating the naive forecast.
+        * alpha (float): Significance level.
     
     """
     if data_samples.shape[1:] != data_truth.shape:
@@ -280,13 +280,13 @@ def msis(data_samples:np.array,
     return (scores + penalty_us + penalty_ls) / seas_diffs
 
 
-def acd(data_samples:np.array, data_truth:np.array, alpha=0.05) -> float:
+def acd(data_samples, data_truth, alpha=0.05) -> float:
     """The absolute difference between the coverage of the method and the target (0.95).
 
     Arguments:
-        * data_samples: samples of time series values
-        * data_truth: ground truth time series values
-        * alpha: percentile to compute coverage difference
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * alpha (float): percentile to compute coverage difference
 
     """
     if data_samples.shape[1:] != data_truth.shape:
