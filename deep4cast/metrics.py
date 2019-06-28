@@ -1,138 +1,166 @@
 import numpy as np
+import warnings
 
 
-def corr(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
-    """Returns the `Pearson correlation coefficient <https://en.wikipedia.org/wiki/Pearson_correlation_coefficient>`_
-    between observed values and aggregated predictions.
-        
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
-    """
-    agg = np.median if not agg else agg
-    data = agg(data_samples, axis=0)
-
-    return np.round(np.corrcoeff(data, data_truth, rowvar=False), 3)
-
-
-def mae(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
+def mae(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean absolute error (MAE)
-        
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
+
+    # Aggregate over samples
     data = agg(data_samples, axis=0)
 
-    return np.round(np.mean(np.abs(data - data_truth)), 3)
+    return np.mean(np.abs(data - data_truth), axis=(1, 2))
 
 
-def mape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
+def mape(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean absolute percentage error (MAPE)
-    
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
+
+    # Aggregate over samples
     data = agg(data_samples, axis=0)
+    
     norm = np.abs(data_truth)
 
-    return np.round(np.mean(np.abs(data - data_truth) / norm) * 100.0, 3)
+    return np.mean(np.abs(data - data_truth) / norm, axis=(1, 2)) * 100.0
 
 
-def mase(data_samples: np.array, data_truth: np.array, data_insample, frequencies, agg=None, **kwargs):
-    """Computes mean absolute scaled error (MASE)
-    
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param data_insample: Insample time series values.
-    :param frequencies: Frequencies used for seasonal naive forecast.
-    :param agg: Property of the forecast distribution to use for evaluation.
+def mase(data_samples, 
+         data_truth, 
+         data_insample, 
+         frequencies, 
+         agg=None) -> np.array:
+    """Computes mean absolute scaled error (MASE) as in the `M4 competition
+    <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * data_insample (``np.array``): In-sample time series data (n_timeseries, n_variables, n_timesteps).
+        * frequencies (list): Frequencies to be used when calculating the naive forecast.
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
-    data = agg(data_samples, axis=0)
 
-    # Build mean absolute error
-    err = np.mean(np.abs(data - data_truth), axis=(1, 2))
+    # Calculate mean absolute for forecast and naive forecast per time series
+    errs, naive_errs = [], []
+    for i in range(data_samples.shape[1]):
+        ts_sample = data_samples[:, i]
+        ts_truth = data_truth[i]
+        ts = data_insample[i]
+        freq = int(frequencies[i])
 
-    # Build naive absolute error
-    t_in = data.shape[-1]
-    err_naive = []
-    for ts, freq in zip(data_insample, frequencies):
-        ts = ts[:, -t_in:]
+        data = agg(ts_sample, axis=0)
+
+        # Build mean absolute error
+        err = np.mean(np.abs(data - ts_truth))
+
+        # naive forecast is calculated using insample
+        t_in = ts.shape[-1]
         naive_forecast = ts[:, :t_in-freq]
         naive_target = ts[:, freq:]
-        err_naive.append(np.mean(np.abs(naive_target - naive_forecast)))
-    err_naive = np.array(err_naive)
+        err_naive = np.mean(np.abs(naive_target - naive_forecast))
 
-    return np.mean(err[err_naive > 0] / err_naive[err_naive > 0])
+        errs.append(err)
+        naive_errs.append(err_naive)
+    
+    errs = np.array(errs)
+    naive_errs = np.array(naive_errs)
+
+    return errs / naive_errs
 
 
-def smape(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
+def smape(data_samples, data_truth, agg=None) -> np.array:
     """Computes symmetric mean absolute percentage error (SMAPE) on the mean
     
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
+
+    # Aggregate over samples
     data = agg(data_samples, axis=0)
 
     eps = 1e-16  # Need to make sure that denominator is not zero
     norm = 0.5 * (np.abs(data) + np.abs(data_truth)) + eps
 
-    return np.round(np.mean(np.abs(data - data_truth) / norm) * 100.0, 3)
+    return np.mean(np.abs(data - data_truth) / norm, axis=(1, 2)) * 100
 
 
-def mse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
+def mse(data_samples, data_truth, agg=None) -> np.array:
     """Computes mean squared error (MSE)
     
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
+
+    # Aggregate over samples
     data = agg(data_samples, axis=0)
 
-    return np.round(np.mean(np.square((data - data_truth))), 3)
+    return np.mean(np.square((data - data_truth)), axis=(1, 2))
 
 
-def rmse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
-    """Computes root-mean squared error (RMSE)
+def rmse(data_samples, data_truth, agg=None) -> np.array:
+    """Computes mean squared error (RMSE)
     
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * agg: Aggregation function applied to sampled predictions (defaults to ``np.median``).
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     agg = np.median if not agg else agg
+
+    # Aggregate over samples
     data = agg(data_samples, axis=0)
 
-    return np.round(np.sqrt(mse(data, data_truth)), 3)
+    return np.sqrt(mse(data, data_truth))
 
 
-def rse(data_samples: np.array, data_truth: np.array, agg=None, **kwargs):
-    """Computes root relative squared error (RSE)
-    
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param agg: Property of the forecast distribution to use for evaluation.
-    """
-    agg = np.median if not agg else agg
-    data = agg(data_samples, axis=0)
-    norm = np.sqrt(np.sum(data_truth - np.mean(data_truth, axis=0)))
-
-    return np.round(np.sqrt(np.sum(np.square(data - data_truth))) / norm, 3)
-
-
-def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **kwargs):
+def coverage(data_samples, data_truth, percentiles=None) -> list:
     """Computes coverage rates of the prediction interval.
-    
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param percentiles: Percentiles to compute coverage for.
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * percentiles (list): percentiles to calculate coverage for
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     if percentiles is None:
         percentiles = [0.5, 2.5, 5, 25, 50, 75, 95, 97.5, 99.5]
 
@@ -146,21 +174,17 @@ def coverage(data_samples: np.array, data_truth: np.array, percentiles=None, **k
     return coverage_percentages
 
 
-def pinball_loss(data_samples: np.array, data_truth: np.array, percentiles=None, **kwargs):
-    """Computes pinball loss of a quantile :math:`\\tau` given the actual value
-    :math:`y` and the predicted quantile :math:`z`.
+def pinball_loss(data_samples, data_truth, percentiles=None) -> np.array:
+    """Computes pinball loss.
 
-    .. math::
-        L_{\\tau} ( y , z ) =
-        \\begin{cases}
-            & ( y - z ) \\tau &\mbox{if } y \geq z \\\\
-            & ( z - y ) ( 1 - \\tau ) &\mbox{if } z > y
-        \\end{cases}
-    
-    :param data_samples: Predicted time series values (n_timesteps, n_timeseries).
-    :param data_truth: Actual values observed.
-    :param percentiles: Percentiles to compute coverage for.
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * percentiles (list): Percentiles used to calculate coverage.
+
     """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
     if percentiles is None:
         percentiles = np.linspace(0, 100, 101)
 
@@ -179,5 +203,99 @@ def pinball_loss(data_samples: np.array, data_truth: np.array, percentiles=None,
         lower = np.sum((1 - q / 100.0) * lower[lower > 0])
         total += (upper + lower) / num_steps
 
+    # Add overall mean pinball loss
     return np.round(total / len(percentiles), 3)
+
+
+def msis(data_samples, 
+         data_truth, 
+         data_insample, 
+         frequencies, 
+         alpha=0.05) -> np.array:
+    """Mean Scaled Interval Score (MSIS) as shown in the `M4 competition 
+    <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * data_insample (``np.array``): In-sample time series data (n_timeseries, n_variables, n_timesteps).
+        * frequencies (list): Frequencies to be used when calculating the naive forecast.
+        * alpha (float): Significance level.
+    
+    """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
+    lower = (alpha / 2) * 100
+    upper = 100 - (alpha / 2) * 100
+
+    # drop individual samples for a given time series where the prediction is
+    # not finite
+    penalty_us, penalty_ls, scores, seas_diffs = [], [], [], []
+    for i in range(data_samples.shape[1]):
+        # Set up individual time series
+        ts_sample = data_samples[:, i]
+        ts_truth = data_truth[i]
+        ts = data_insample[i]
+        freq = int(frequencies[i])
+
+        mask = np.where(~np.isfinite(ts_sample))[0]
+        if mask.shape[0] > 0:
+            mask = np.unique(mask)
+            warnings.warn('For time series {}, removing {} of {} total samples.'.format(
+                i, mask.shape[0], ts_sample.shape[0]))
+            ts_sample = np.delete(ts_sample, mask, axis=0)
+        
+        # Calculate percentiles
+        data_perc = np.percentile(ts_sample, q=(lower, upper), axis=0)
+
+        # Penalty is (lower - actual) + (actual - upper)
+        penalty_l = data_perc[0] - ts_truth
+        penalty_l = np.where(penalty_l > 0, penalty_l, 0)
+        penalty_u = ts_truth - data_perc[1]
+        penalty_u = np.where(penalty_u > 0, penalty_u, 0)
+
+        penalty_u = (2 / alpha) * np.mean(penalty_u, axis=1)
+        penalty_l = (2 / alpha) * np.mean(penalty_l, axis=1)
+
+        # Score is upper - lower
+        score = np.mean(data_perc[1] - data_perc[0], axis=1)
+
+        # Naive forecast is calculated using insample data
+        t_in = ts.shape[-1]
+        ts = ts[-t_in:]
+        naive_forecast = ts[:, :t_in-freq]
+        naive_target = ts[:, freq:]
+        seas_diff = np.mean(np.abs(naive_target - naive_forecast))
+
+        penalty_us.append(penalty_u)
+        penalty_ls.append(penalty_l)
+        scores.append(score)
+        seas_diffs.append(seas_diff)
+
+    penalty_us = np.concatenate(penalty_us)
+    penalty_ls = np.concatenate(penalty_ls)
+    scores = np.concatenate(scores)
+    seas_diffs = np.array(seas_diffs)
+
+    return (scores + penalty_us + penalty_ls) / seas_diffs
+
+
+def acd(data_samples, data_truth, alpha=0.05) -> float:
+    """The absolute difference between the coverage of the method and the target (0.95).
+
+    Arguments:
+        * data_samples (``np.array``): Sampled predictions (n_samples, n_timeseries, n_variables, n_timesteps).
+        * data_truth (``np.array``): Ground truth time series values (n_timeseries, n_variables, n_timesteps).
+        * alpha (float): percentile to compute coverage difference
+
+    """
+    if data_samples.shape[1:] != data_truth.shape:
+        raise ValueError('Last three dimensions of data_samples and data_truth need to be compatible')
+
+    alpha = (1 - alpha) * 100
+    data_perc = np.percentile(data_samples, q=[alpha], axis=0)
+    acd = alpha - np.round(np.mean(data_truth <= data_perc[0]) * 100.0, 3)
+    acd = np.abs(acd) / 100
+
+    return acd
 

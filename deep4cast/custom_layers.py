@@ -3,15 +3,18 @@ import torch
 
 
 class ConcreteDropout(torch.nn.Module):
-    """Applies Dropout to the input, even at prediction time.
+    """Applies Dropout to the input, even at prediction time and learns dropout probability
+    from the data.
+    
+    In convolutional neural networks, we can use dropout to drop entire channels using
+    the 'channel_wise' argument.
+    
+    Arguments:
+        * dropout_regularizer (float): Should  be set to 2 / N, where N is the number of training examples.
+        * init_range (tuple): Initial range for dropout probabilities.
+        * channel_wise (boolean): apply dropout over all input or across convolutional channels.
 
-    :param dropout_regularizer: Generally needs to be set to `2 / N`, where `N`
-        is the number of training examples.
-    :param init_range: Initial range for dropout probabilities.
-    :param channel_wise: Determines if dropout is appplied accross all input or
-        across channels.
     """
-
     def __init__(self,
                  dropout_regularizer=1e-5,
                  init_range=(0.1, 0.3),
@@ -28,8 +31,7 @@ class ConcreteDropout(torch.nn.Module):
             torch.empty(1).uniform_(init_min, init_max))
 
     def forward(self, x):
-        """Performs concrete dropout at every call.
-        """
+        """Returns input but with randomly dropped out values."""
         # Get the dropout probability
         p = torch.sigmoid(self.p_logit)
 

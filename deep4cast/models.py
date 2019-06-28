@@ -1,33 +1,41 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
+# import torch.nn.functional as F
 
 from deep4cast import custom_layers
 
 
 class WaveNet(torch.nn.Module):
-    """:param input_channels: Number of covariates in input time series.
-    :param output_channels: Number of covariates in target time series.
-    :param horizon: Number of time steps for forecast.
-    :param hidden_channels: Number of channels in convolutional hidden layers.
-    :param skip_channels: Number of channels in convolutional layers for skip
-        connections.
-    :param dense_units: Number of hidden units in final dense layer.
-    :param n_layers: Number of layers per Wavenet block (determines receptive
-        field size).
-    :param n_blocks: Number of Wavenet blocks.
-    :param dilation: Dilation factor for temporal convolution.
+    """Implements `WaveNet` architecture for time series forecasting. Inherits 
+    from pytorch `Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_.
+    Vector forecasts are made via a fully-connected layer.
+
+    References:
+        - `WaveNet: A Generative Model for Raw Audio <https://arxiv.org/pdf/1609.03499.pdf>`_
+    
+    Arguments:
+        * input_channels (int): Number of covariates in input time series.
+        * output_channels (int): Number of target time series.
+        * horizon (int): Number of time steps to forecast.
+        * hidden_channels (int): Number of channels in convolutional hidden layers.
+        * skip_channels (int): Number of channels in convolutional layers for skip connections.
+        * dense_units (int): Number of hidden units in final dense layer.
+        * n_layers (int): Number of layers per Wavenet block (determines receptive field size).
+        * n_blocks (int): Number of Wavenet blocks.
+        * dilation (int): Dilation factor for temporal convolution.
+
     """
     def __init__(self,
-                 input_channels: int,
-                 output_channels: int,
-                 horizon: int,
+                 input_channels,
+                 output_channels,
+                 horizon,
                  hidden_channels=64,
                  skip_channels=64,
                  dense_units=128,
                  n_layers=7,
                  n_blocks=1,
                  dilation=2):
+        """Inititalize variables."""
         super(WaveNet, self).__init__()
         self.output_channels = output_channels
         self.horizon = horizon
@@ -74,25 +82,35 @@ class WaveNet(torch.nn.Module):
         )
         self.do_linear_mean = custom_layers.ConcreteDropout()
         self.do_linear_std = custom_layers.ConcreteDropout()
-        self.linear_mean = torch.nn.Linear(skip_channels, horizon*output_channels)
-        self.linear_std = torch.nn.Linear(skip_channels, horizon*output_channels)
+        self.do_linear_df = custom_layers.ConcreteDropout()
+        self.linear_mean = torch.nn.Linear(
+            skip_channels, horizon*output_channels)
+        self.linear_std = torch.nn.Linear(
+            skip_channels, horizon*output_channels)
+        self.linear_df = torch.nn.Linear(
+            skip_channels, horizon*output_channels)
 
     def forward(self, inputs):
-        """Returns the parameters for a Gaussian distribution."""
+        """Forward function."""
         output, reg_e = self.encode(inputs)
-        output_mean, output_std, reg_d = self.decode(output)
+        output_mean, output_std, output_df, reg_d = self.decode(output)
 
         # Regularization
         regularizer = reg_e + reg_d
 
-        return {'loc': output_mean, 'scale': output_std, 'regularizer': regularizer}
+        return {'df': output_df, 'loc': output_mean, 'scale': output_std, 'regularizer': regularizer}
 
-    def encode(self, inputs):
-        """Encoder part of the architecture."""
+    def encode(self, inputs: torch.Tensor):
+        """Returns embedding vectors.
+        
+        Arguments:
+            * inputs: time series input to make forecasts for
+
+        """
         # Input layer
         output, res_conv_input = self.do_conv_input(inputs)
         output = self.conv_input(output)
-        
+
         # Loop over WaveNet layers and blocks
         regs, skip_connections = [], []
         for do, conv, skip, resi in zip(self.do, self.conv, self.skip, self.resi):
@@ -109,7 +127,7 @@ class WaveNet(torch.nn.Module):
         # Sum up regularizer terms and skip connections
         regs = sum(r for r in regs)
         output = sum([s[:, :, -output.size(2):] for s in skip_connections])
-        
+
         # Nonlinear output layers
         output, res_conv_post = self.do_conv_post(output)
         output = torch.nn.functional.relu(output)
@@ -125,38 +143,46 @@ class WaveNet(torch.nn.Module):
 
         return output, regularizer
 
-    def decode(self, inputs):
-        """Decoder part of the architecture."""
+    def decode(self, inputs: torch.Tensor):
+        """Returns forecasts based on embedding vectors.
+        
+        Arguments:
+            * inputs: embedding vectors to generate forecasts for
+
+        """
         # Apply dense layer to match output length
         output_mean, res_linear_mean = self.do_linear_mean(inputs)
         output_std, res_linear_std = self.do_linear_std(inputs)
+        output_df, res_linear_df = self.do_linear_df(inputs)
         output_mean = self.linear_mean(output_mean)
         output_std = self.linear_std(output_std).exp()
+        output_df = self.linear_df(output_df).exp()
 
-        # Reshape the layer output to match targets 
+        # Reshape the layer output to match targets
         # Shape is (batch_size, output_channels, horizon)
         batch_size = inputs.shape[0]
         output_mean = output_mean.reshape(
-                (batch_size, self.output_channels, self.horizon)
+            (batch_size, self.output_channels, self.horizon)
         )
         output_std = output_std.reshape(
-                (batch_size, self.output_channels, self.horizon)
+            (batch_size, self.output_channels, self.horizon)
+        )
+        output_df = output_df.reshape(
+            (batch_size, self.output_channels, self.horizon)
         )
 
         # Regularization terms
-        regularizer = res_linear_mean + res_linear_std
-    
-        return output_mean, output_std, regularizer
+        regularizer = res_linear_mean + res_linear_std + res_linear_df
+
+        return output_mean, output_std, output_df, regularizer
 
     @property
     def n_parameters(self):
-        """Return the number of parameters of model."""
-        par = list(self.parameters())
+        """Returns the number of model parameters."""
         s = sum([np.prod(list(d.size())) for d in par])
         return s
 
     @property
     def receptive_field_size(self):
-        """Return the length of the receptive field."""
+        """Returns the length of the receptive field."""
         return self.dilation * max(self.dilations)
-

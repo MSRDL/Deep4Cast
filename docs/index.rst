@@ -2,19 +2,24 @@
 Deep4Cast Documentation
 =======================
 
-Decision making incorporating uncertainty.
-==========================================
+Forecasting for decision making under uncertainty
+=================================================
 
 **This package is under active development. Things may change :-).**
 
-``Deep4Cast`` is a scalable machine learning package implemented in ``Python`` and ``Torch``. It has a front-end API similar to ``scikit-learn``. It is designed for medium to large time series data sets and allows for modeling of forecast uncertainties.
+``Deep4Cast`` is a scalable machine learning package implemented in ``Python`` 
+and ``Torch``. It has a front-end API similar to ``scikit-learn``. It is 
+designed for medium to large time series data sets and allows for modeling of 
+forecast uncertainties.
 
-The network architecture is based on ``WaveNet``. Regularization and approximate sampling from posterior predictive distributions of forecasts are achieved via ``Concrete Dropout``.
+The network architecture is based on ``WaveNet``. Regularization and 
+approximate sampling from posterior predictive distributions of forecasts are 
+achieved via ``Concrete Dropout``.
 
 Examples
 --------
 
-:ref:`/examples/github_forecasting.ipynb`
+:ref:`/examples/m4daily.ipynb`
 
 
 Authors
@@ -37,9 +42,9 @@ References
 
     get_started
     examples/*
-    dataset
+    datasets
     transforms
     models
     forecasters
     metrics
-
+    custom_layers
