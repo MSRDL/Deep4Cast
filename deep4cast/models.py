@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-# import torch.nn.functional as F
 
 from deep4cast import custom_layers
 
@@ -179,6 +178,7 @@ class WaveNet(torch.nn.Module):
     @property
     def n_parameters(self):
         """Returns the number of model parameters."""
+        par = list(self.parameters())
         s = sum([np.prod(list(d.size())) for d in par])
         return s
 
