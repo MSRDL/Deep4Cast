@@ -15,6 +15,7 @@ class TimeSeriesDataset(Dataset):
         * step (int): Time step size between consecutive examples.
         * transform (``transforms.Compose``): Specific transformations to apply to time series examples.
         * static_covs (list): Static covariates for each item in ``time_series`` list.
+        * thinning (float): Fraction of examples to include.
 
     """
     def __init__(self, 
@@ -23,7 +24,8 @@ class TimeSeriesDataset(Dataset):
                  horizon,
                  step, 
                  transform,
-                 static_covs=None):
+                 static_covs=None,
+                 thinning=1.0):
         self.time_series = time_series
         self.lookback = lookback
         self.horizon = horizon
@@ -56,7 +58,7 @@ class TimeSeriesDataset(Dataset):
                  )
 
         # Store the number of training examples
-        self._len = self.example_ids.__len__()
+        self._len = int(self.example_ids.__len__() * thinning)
 
     def __len__(self):
         return self._len

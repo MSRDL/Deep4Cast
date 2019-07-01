@@ -21,8 +21,8 @@ class Forecaster():
     """
     def __init__(self,
                  model,
-                 loss=torch.distributions.Normal,
-                 optimizer=torch.optim.Adam,
+                 loss,
+                 optimizer,
                  n_epochs=1,
                  device='cpu',
                  checkpoint_path='./',
@@ -36,7 +36,10 @@ class Forecaster():
         self.checkpoint_path = checkpoint_path
         self.verbose = verbose
 
-    def fit(self, dataloader_train: torch.utils.data.DataLoader, dataloader_val=None, eval_model=False):
+    def fit(self,
+            dataloader_train,
+            dataloader_val=None,
+            eval_model=False):
         """Fits a model to a given a dataset.
         
         Arguments:

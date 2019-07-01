@@ -2,7 +2,7 @@ import numpy as np
 import warnings
 
 
-def mae(data_samples, data_truth, agg=None) -> np.array:
+def mae(data_samples, data_truth, agg=None, **kwargs) -> np.array:
     """Computes mean absolute error (MAE)
 
     Arguments:
@@ -21,7 +21,7 @@ def mae(data_samples, data_truth, agg=None) -> np.array:
     return np.mean(np.abs(data - data_truth), axis=(1, 2))
 
 
-def mape(data_samples, data_truth, agg=None) -> np.array:
+def mape(data_samples, data_truth, agg=None, **kwargs) -> np.array:
     """Computes mean absolute percentage error (MAPE)
 
     Arguments:
@@ -46,7 +46,8 @@ def mase(data_samples,
          data_truth, 
          data_insample, 
          frequencies, 
-         agg=None) -> np.array:
+         agg=None,
+         **kwargs) -> np.array:
     """Computes mean absolute scaled error (MASE) as in the `M4 competition
     <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
 
@@ -90,7 +91,7 @@ def mase(data_samples,
     return errs / naive_errs
 
 
-def smape(data_samples, data_truth, agg=None) -> np.array:
+def smape(data_samples, data_truth, agg=None, **kwargs) -> np.array:
     """Computes symmetric mean absolute percentage error (SMAPE) on the mean
     
     Arguments:
@@ -112,7 +113,7 @@ def smape(data_samples, data_truth, agg=None) -> np.array:
     return np.mean(np.abs(data - data_truth) / norm, axis=(1, 2)) * 100
 
 
-def mse(data_samples, data_truth, agg=None) -> np.array:
+def mse(data_samples, data_truth, agg=None, **kwargs) -> np.array:
     """Computes mean squared error (MSE)
     
     Arguments:
@@ -131,7 +132,7 @@ def mse(data_samples, data_truth, agg=None) -> np.array:
     return np.mean(np.square((data - data_truth)), axis=(1, 2))
 
 
-def rmse(data_samples, data_truth, agg=None) -> np.array:
+def rmse(data_samples, data_truth, agg=None, **kwargs) -> np.array:
     """Computes mean squared error (RMSE)
     
     Arguments:
@@ -150,7 +151,7 @@ def rmse(data_samples, data_truth, agg=None) -> np.array:
     return np.sqrt(mse(data, data_truth))
 
 
-def coverage(data_samples, data_truth, percentiles=None) -> list:
+def coverage(data_samples, data_truth, percentiles=None, **kwargs) -> list:
     """Computes coverage rates of the prediction interval.
 
     Arguments:
@@ -174,7 +175,7 @@ def coverage(data_samples, data_truth, percentiles=None) -> list:
     return coverage_percentages
 
 
-def pinball_loss(data_samples, data_truth, percentiles=None) -> np.array:
+def pinball_loss(data_samples, data_truth, percentiles=None, **kwargs) -> np.array:
     """Computes pinball loss.
 
     Arguments:
@@ -211,7 +212,7 @@ def msis(data_samples,
          data_truth, 
          data_insample, 
          frequencies, 
-         alpha=0.05) -> np.array:
+         alpha=0.05, **kwargs) -> np.array:
     """Mean Scaled Interval Score (MSIS) as shown in the `M4 competition 
     <https://www.m4.unic.ac.cy/wp-content/uploads/2018/03/M4-Competitors-Guide.pdf>`_.
 
@@ -280,7 +281,7 @@ def msis(data_samples,
     return (scores + penalty_us + penalty_ls) / seas_diffs
 
 
-def acd(data_samples, data_truth, alpha=0.05) -> float:
+def acd(data_samples, data_truth, alpha=0.05, **kwargs) -> float:
     """The absolute difference between the coverage of the method and the target (0.95).
 
     Arguments:
