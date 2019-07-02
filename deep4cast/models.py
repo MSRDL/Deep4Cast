@@ -7,7 +7,7 @@ from deep4cast import custom_layers
 class WaveNet(torch.nn.Module):
     """Implements `WaveNet` architecture for time series forecasting. Inherits 
     from pytorch `Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_.
-    Vector forecasts are made via a fully-connected layer.
+    Vector forecasts are made via a fully-connected linear layer.
 
     References:
         - `WaveNet: A Generative Model for Raw Audio <https://arxiv.org/pdf/1609.03499.pdf>`_
@@ -18,7 +18,6 @@ class WaveNet(torch.nn.Module):
         * horizon (int): Number of time steps to forecast.
         * hidden_channels (int): Number of channels in convolutional hidden layers.
         * skip_channels (int): Number of channels in convolutional layers for skip connections.
-        * dense_units (int): Number of hidden units in final dense layer.
         * n_layers (int): Number of layers per Wavenet block (determines receptive field size).
         * n_blocks (int): Number of Wavenet blocks.
         * dilation (int): Dilation factor for temporal convolution.
@@ -30,7 +29,6 @@ class WaveNet(torch.nn.Module):
                  horizon,
                  hidden_channels=64,
                  skip_channels=64,
-                 dense_units=128,
                  n_layers=7,
                  n_blocks=1,
                  dilation=2):
