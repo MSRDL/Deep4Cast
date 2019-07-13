@@ -1,3 +1,4 @@
+from fastparquet import ParquetFile
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -90,5 +91,100 @@ class TimeSeriesDataset(Dataset):
         # Static covariates can be attached
         if self.static_covs is not None:
             sample['X_stat'] = self.static_covs[ts_id]
+
+        return sample
+
+
+class TimeSeriesParquet(Dataset):
+    """Takes a file location of parquet files paritioned on each time series id and
+    file location of metadata about the length of each time series. Streams windowed
+    subseries for training.
+
+    Arguments:
+        * path_parquet (str): File location of partitioned parquet files.
+        * path_metadata (list): List of CSV file locations containing time series id and length.
+        * lookback (int): Number of time steps used as input for forecasting.
+        * horizon (int): Number of time steps to forecast.
+        * step (int): Time step size between consecutive examples.
+        * transform (``transforms.Compose``): Specific transformations to apply to time series examples.
+        * thinning (float): Fraction of examples to include.
+
+    """
+
+    def __init__(self,
+                 path_parquet,
+                 path_metadata,
+                 lookback,
+                 horizon,
+                 step,
+                 transform,
+                 thinning=1.0):
+        self.path_parquet = path_parquet
+        self.lookback = lookback
+        self.horizon = horizon
+        self.step = step
+        self.transform = transform
+
+        path_file = ParquetFile(self.path_parquet)
+        self.partitions = path_file.info['partitions'][0]
+
+        # Slice each time series into examples, assigning IDs to each
+        example_ids = {}
+
+        for file_meta in path_metadata:
+            with open(file_meta) as infile:
+                for line in infile:
+                    line = line.strip('\n')
+                    line = line.split(',')
+                    example_ids = self.hashmap(
+                        index=line[0],
+                        length=int(line[1]),
+                        step=step,
+                        example_ids=example_ids)
+
+        self.example_ids = example_ids
+
+        # Store the number of training examples
+        self._len = int(len(self.example_ids) * thinning)
+
+    def hashmap(self, index, length, step, example_ids):
+        last_id = len(example_ids) - 1
+        for j in range(length):
+            example_ids[last_id + j] = (index, j * step)
+
+        return example_ids
+
+    def __len__(self):
+        return self._len
+
+    def __getitem__(self, idx):
+        # Get time series
+        ts_id, lookback_id = self.example_ids[idx]
+
+        path_file = self.path_parquet + self.partitions + '=' + ts_id + '/part.0.parquet'
+
+        ts = ParquetFile(path_file)
+        ts = ts.to_pandas()
+        ts = ts.values.T
+
+        # Prepare input and target. Zero pad if necessary.
+        if ts.shape[-1] < self.lookback + self.horizon:
+            # If the time series is too short, we zero pad
+            X = ts[:, :-self.horizon]
+            X = np.pad(
+                X,
+                pad_width=((0, 0), (self.lookback - X.shape[-1], 0)),
+                mode='constant',
+                constant_values=0
+            )
+            y = ts[:, -self.horizon:]
+        else:
+            X = ts[:, lookback_id:lookback_id + self.lookback]
+            y = ts[:, lookback_id + self.lookback:lookback_id +
+                   self.lookback + self.horizon]
+
+        # Create the input and output for the sample
+        sample = {'X': X, 'y': y}
+        sample = self.transform(sample)
 
         return sample
