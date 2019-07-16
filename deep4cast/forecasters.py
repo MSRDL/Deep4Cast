@@ -79,12 +79,11 @@ class Forecaster():
 
             # Backpropagation
             self.optimizer.zero_grad()
-            outputs = self.model(inputs)
-            reg = outputs.pop('regularizer')
-            loss = -self.loss(**outputs).log_prob(targets).mean() + reg
+            outputs, reg = self.model(inputs)
+            loss = self.loss.evaluate(outputs, targets) + reg
             if torch.isnan(loss.mean()):
                 raise ValueError('NaN in training loss.')
-            loss.mean().backward()
+            loss.backward()
             self.optimizer.step()
 
             # Status update for the user
@@ -129,13 +128,11 @@ class Forecaster():
                 targets = batch['y'].to(self.device)
                 
                 # Forward pass through the model
-                outputs = self.model(inputs)
-                outputs.pop('regularizer')
-                
+                outputs, __ = self.model(inputs)
                 # Calculate loss (typically probability density)    
                 for i in range(n_samples):
-                    loss = self.loss(**outputs).log_prob(targets) 
-                    max_llikelihood[i] += loss.sum().item()
+                    loss = self.loss.evaluate(outputs, targets) 
+                    max_llikelihood[i] += loss.item()
             max_llikelihood = np.max(max_llikelihood)
             
         return -max_llikelihood / len(dataloader.dataset)
@@ -156,7 +153,7 @@ class Forecaster():
                 for i in range(n_samples):
                     outputs = self.model(inputs)
                     outputs.pop('regularizer')
-                    outputs = self.loss(**outputs).sample((1,)).cpu()
+                    outputs = self.loss.sample()
                     batch['y'] = outputs[0]
                     outputs = copy.deepcopy(batch)
                     outputs = dataloader.dataset.transform.untransform(outputs)
