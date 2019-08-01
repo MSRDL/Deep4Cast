@@ -8,7 +8,7 @@ Main Requirements
 =================
 
 - `python 3.6 <http://python.org>`_
-- `pytorch 1.0 <http://pytorch.org>`_
+- `pytorch 1.1 <http://pytorch.org>`_
 
 Installation
 ============

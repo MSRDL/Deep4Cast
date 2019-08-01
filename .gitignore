@@ -10,6 +10,8 @@
 *.rds
 *.db
 *.log
+*.parquet
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
